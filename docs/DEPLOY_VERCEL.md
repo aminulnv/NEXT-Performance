@@ -92,6 +92,6 @@ https://next-performance-beta.vercel.app
 | Problem | Fix |
 |---------|-----|
 | Vercel **404** on `/api/auth/google` | Set `API_BACKEND_URL=https://next-performance.onrender.com`, redeploy Vercel |
-| Redirect to **localhost** after login | Remove `APP_URL=http://localhost:5173` from Render; redeploy Render with latest code |
+| Redirect to **localhost** after login | On Render → Environment: set `APP_URL=https://next-performance.onrender.com` or **delete** the localhost value. Redeploy. Latest code also ignores localhost `APP_URL` and uses `RENDER_EXTERNAL_URL` / request Host. |
 | `auth_failed` | Check Render logs; `GOOGLE_*`, `SESSION_SECRET` |
 | `no_access` | Add user in Supabase or `access.json` on Render |

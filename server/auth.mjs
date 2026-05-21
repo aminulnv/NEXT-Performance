@@ -2,10 +2,20 @@ import { OAuth2Client } from 'google-auth-library'
 import { resolveUserRole } from './accessStore.mjs'
 import { loadPermissionsConfig, roleHasPage } from './permissions.mjs'
 
-/** Public site URL — from request Host (Vercel/Render) or APP_URL env. */
+function isLocalhostUrl(url) {
+  return /localhost|127\.0\.0\.1/i.test(url ?? '')
+}
+
+/** Render sets this automatically on web services. */
+function renderPublicUrl() {
+  const url = process.env.RENDER_EXTERNAL_URL?.trim().replace(/\/$/, '')
+  return url && !isLocalhostUrl(url) ? url : null
+}
+
+/** Public site URL — from request Host (Vercel/Render), APP_URL, or RENDER_EXTERNAL_URL. */
 export function getAppUrl(req) {
   const explicit = process.env.APP_URL?.trim().replace(/\/$/, '')
-  if (explicit && !/localhost|127\.0\.0\.1/i.test(explicit)) {
+  if (explicit && !isLocalhostUrl(explicit)) {
     return explicit
   }
   if (req) {
@@ -13,11 +23,22 @@ export function getAppUrl(req) {
     const proto = (req.get('x-forwarded-proto') || (req.secure ? 'https' : 'http'))
       .split(',')[0]
       .trim()
-    if (host && !/localhost|127\.0\.0\.1/i.test(host)) {
+    if (host && !isLocalhostUrl(host)) {
       return `${proto}://${host}`.replace(/\/$/, '')
     }
   }
+  const onRender = renderPublicUrl()
+  if (onRender) return onRender
   return (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
+}
+
+/** Default origin for CORS / logging when no request is available. */
+export function getDefaultAppOrigin() {
+  const explicit = process.env.APP_URL?.trim().replace(/\/$/, '')
+  if (explicit && !isLocalhostUrl(explicit)) return explicit
+  const onRender = renderPublicUrl()
+  if (onRender) return onRender
+  return 'http://localhost:5173'
 }
 
 /** Send users to the public site they used to sign in (not localhost). */
@@ -33,12 +54,15 @@ function redirectToApp(res, path, req) {
 export function validateAppUrlForProduction() {
   if (process.env.NODE_ENV !== 'production') return
   const url = process.env.APP_URL?.trim()
-  if (url && /localhost|127\.0\.0\.1/i.test(url)) {
+  const renderUrl = renderPublicUrl()
+  if (url && isLocalhostUrl(url)) {
     console.warn(
-      `[auth] APP_URL is localhost (${url}) — OAuth will use the request Host header instead (x-forwarded-host).`,
+      `[auth] APP_URL is localhost (${url}) — ignored; using request Host or RENDER_EXTERNAL_URL (${renderUrl ?? 'none'}).`,
     )
   } else if (!url) {
-    console.log('[auth] APP_URL not set — OAuth redirects use the request Host (Render or Vercel).')
+    console.log(
+      `[auth] APP_URL not set — OAuth redirects use request Host or RENDER_EXTERNAL_URL (${renderUrl ?? 'none'}).`,
+    )
   }
 }
 

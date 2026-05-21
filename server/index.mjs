@@ -13,6 +13,7 @@ import {
   requireAuth,
   isAuthEnabled,
   validateAppUrlForProduction,
+  getDefaultAppOrigin,
 } from './auth.mjs'
 import { registerAccessRoutes } from './accessRoutes.mjs'
 import { registerPermissionsRoutes } from './permissionsRoutes.mjs'
@@ -44,15 +45,16 @@ const app = express()
 const port = Number(process.env.PORT || process.env.API_PORT) || 3001
 const CACHE_MS = Number(process.env.API_CACHE_MS) || 60 * 60 * 1000
 const STALE_REFRESH_MS = Number(process.env.STALE_REFRESH_MS) || 6 * 60 * 60 * 1000
-const defaultOrigin = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
+const defaultOrigin = getDefaultAppOrigin()
 
 const corsAllowlist = new Set(
   [
     defaultOrigin,
     'https://next-performance.onrender.com',
     'https://next-performance-beta.vercel.app',
+    process.env.RENDER_EXTERNAL_URL?.replace(/\/$/, ''),
     process.env.APP_URL?.replace(/\/$/, ''),
-  ].filter(Boolean),
+  ].filter((origin) => origin && !/localhost|127\.0\.0\.1/i.test(origin)),
 )
 
 app.set('trust proxy', 1)
