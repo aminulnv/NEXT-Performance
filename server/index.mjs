@@ -5,7 +5,7 @@ import session from 'express-session'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { buildCacheFromRevolut, saveCacheToDisk } from './buildCache.mjs'
+import { buildCacheFromRevolut, saveCache } from './buildCache.mjs'
 import { readDiskCache } from './diskCache.mjs'
 import { importGoalsFromCsv, loadGoalsDataset } from './goalsStore.mjs'
 import {
@@ -35,6 +35,11 @@ import {
 } from './permissions.mjs'
 import { accessStorageBackend } from './accessStore.mjs'
 import { isSupabaseConfigured, getSupabaseConfigHint } from './supabaseAdmin.mjs'
+import {
+  loadPerformanceCacheFromSupabase,
+  isPerformanceSupabaseCacheEnabled,
+  getPerformanceCacheConfigHint,
+} from './performanceStoreSupabase.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distPath = path.join(__dirname, '..', 'dist')
@@ -133,7 +138,7 @@ function toApiPayload(cache, req) {
 async function persistCache(data) {
   memoryCache = data
   memoryCacheAt = Date.now()
-  await saveCacheToDisk(data)
+  await saveCache(data)
 }
 
 async function refreshCache() {
@@ -175,6 +180,28 @@ function scheduleBackgroundRefreshIfStale() {
   refreshCache().catch((err) => console.error('[cache] Background refresh failed:', err.message))
 }
 
+async function loadPersistedCache() {
+  if (isPerformanceSupabaseCacheEnabled()) {
+    const fromDb = await loadPerformanceCacheFromSupabase()
+    if (fromDb) return fromDb
+  }
+  const disk = await readDiskCache()
+  if (!disk) return null
+  return {
+    fetchedAt: disk.fetchedAt,
+    recordCount: disk.recordCount,
+    records: disk.records,
+    employeesByEmail: disk.employeesByEmail ?? null,
+    cacheStatus: 'disk',
+  }
+}
+
+function applyMemoryCache(data) {
+  memoryCache = data
+  memoryCacheAt = Date.now()
+  return memoryCache
+}
+
 async function resolveCache({ force = false } = {}) {
   const now = Date.now()
 
@@ -183,16 +210,9 @@ async function resolveCache({ force = false } = {}) {
   }
 
   if (!force) {
-    const disk = await readDiskCache()
-    if (disk) {
-      memoryCache = {
-        fetchedAt: disk.fetchedAt,
-        recordCount: disk.recordCount,
-        records: disk.records,
-        employeesByEmail: disk.employeesByEmail ?? null,
-        cacheStatus: 'disk',
-      }
-      memoryCacheAt = now
+    const persisted = await loadPersistedCache()
+    if (persisted) {
+      applyMemoryCache(persisted)
       scheduleBackgroundRefreshIfStale()
       return memoryCache
     }
@@ -203,15 +223,8 @@ async function resolveCache({ force = false } = {}) {
   }
 
   if (refreshInFlight) {
-    const disk = await readDiskCache()
-    if (disk) {
-      return {
-        fetchedAt: disk.fetchedAt,
-        recordCount: disk.recordCount,
-        records: disk.records,
-        cacheStatus: 'disk',
-      }
-    }
+    const persisted = await loadPersistedCache()
+    if (persisted) return persisted
     return refreshInFlight
   }
 
@@ -251,6 +264,7 @@ app.get('/api/health', (_req, res) => {
     accessStorage: accessStorageBackend(),
     permissionsStorage: getPermissionsCacheMeta().source,
     supabase: isSupabaseConfigured(),
+    performanceCache: isPerformanceSupabaseCacheEnabled() ? 'supabase-encrypted' : 'disk',
   })
 })
 
@@ -354,10 +368,15 @@ const server = app.listen(port, async () => {
   }
   const accessHint = getSupabaseConfigHint()
   if (accessHint) console.warn(`[access] ${accessHint}`)
+  const perfHint = getPerformanceCacheConfigHint()
+  if (perfHint) console.warn(`[cache] ${perfHint}`)
   console.log(`[access] Storage: ${accessStorageBackend()}`)
   console.log(`[permissions] Storage: ${getPermissionsCacheMeta().source}`)
   if (isSupabaseConfigured()) {
     console.log('[supabase] User access → dashboard_users table')
+  }
+  if (isPerformanceSupabaseCacheEnabled()) {
+    console.log('[cache] Encrypted performance snapshot → performance_encrypted_cache')
   }
   const loaded = await loadDiskIntoMemory()
   if (loaded) {

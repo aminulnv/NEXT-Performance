@@ -1,7 +1,7 @@
 # Supabase go-live setup
 
 Use Supabase for **persistent user access** (no more lost `access.json` on redeploy).  
-**Google login** stays on your Express API; **Revolut data** still syncs to server cache (or optional `performance_records` table later).
+**Google login** stays on your Express API; **Revolut data** can be stored as an **encrypted snapshot** in Supabase (see `docs/PERFORMANCE_CACHE.md`).
 
 ---
 
@@ -16,7 +16,8 @@ Open your project → **SQL Editor** → run each file **in order**:
 | 3 | `supabase/migrations/00003_dashboard_access.sql` |
 | 4 | `supabase/migrations/00004_goals_storage.sql` |
 | 5 | `supabase/migrations/00005_performance_rls_by_role.sql` |
-| 6 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+| 6 | `supabase/migrations/00006_performance_encrypted_cache.sql` |
+| 7 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
 
 ---
 
@@ -47,9 +48,14 @@ ALLOWED_EMAIL_DOMAIN=nextventures.io
 VITE_BYPASS_AUTH=false
 REVOLUT_EMAIL=...
 REVOLUT_TOKEN=...
+
+# Encrypted performance cache (openssl rand -base64 32)
+PERFORMANCE_DATA_ENCRYPTION_KEY=...
 ```
 
 When `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set, the app uses **`dashboard_users`** instead of `server/data/access.json`.
+
+When `PERFORMANCE_DATA_ENCRYPTION_KEY` is also set, Revolut data is cached in **`performance_encrypted_cache`** (fast loads; see `docs/PERFORMANCE_CACHE.md`).
 
 Check: `GET /api/health` → `"accessStorage": "supabase"`.
 
@@ -98,7 +104,8 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 | Table | Purpose |
 |-------|---------|
 | `dashboard_users` | Email, role, employee_id — **who can log in** |
-| `performance_records` | Optional DB copy of Revolut data (API still uses cache today) |
+| `performance_encrypted_cache` | Encrypted Revolut snapshot (API reads this first when configured) |
+| `performance_records` | Legacy plaintext schema (unused by API; prefer encrypted cache) |
 | `goals_imports` | Optional persisted goals CSV |
 | `profiles` | Optional link to Supabase Auth users |
 | `saved_metric_views` | Per-user saved explore views |
@@ -107,7 +114,9 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 
 ## 8. Go-live checklist
 
-- [ ] All 5 migrations run in SQL Editor  
+- [ ] All 6 migrations run in SQL Editor  
+- [ ] `PERFORMANCE_DATA_ENCRYPTION_KEY` set on production host  
+- [ ] `npm run cache:warm` after first deploy (or when Revolut data changes)  
 - [ ] Seed admin user (`dashboard_users`)  
 - [ ] `SUPABASE_*` set on production host  
 - [ ] `APP_URL` + Google redirect = production domain  

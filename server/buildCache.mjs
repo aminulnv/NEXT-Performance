@@ -2,6 +2,7 @@ import { loadRevolutPerformanceDataset } from './revolutData.mjs'
 import { flattenGrades } from './flatten.mjs'
 import { writeDiskCache } from './diskCache.mjs'
 import { buildEmployeesByEmailFromList } from './employeeLookup.mjs'
+import { savePerformanceCacheToSupabase } from './performanceStoreSupabase.mjs'
 
 export function getCredentials() {
   const email = process.env.REVOLUT_EMAIL
@@ -60,10 +61,17 @@ export async function buildCacheFromRevolut() {
   }
 }
 
-export async function saveCacheToDisk(data) {
+export async function saveCache(data) {
   await writeDiskCache({
     fetchedAt: data.fetchedAt,
     recordCount: data.recordCount,
     records: data.records,
   })
+  const savedToSupabase = await savePerformanceCacheToSupabase(data)
+  if (savedToSupabase) {
+    console.log(`[cache] Encrypted snapshot saved to Supabase (${data.recordCount} records)`)
+  }
 }
+
+/** @deprecated Use saveCache */
+export const saveCacheToDisk = saveCache

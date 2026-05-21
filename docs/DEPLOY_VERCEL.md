@@ -28,7 +28,7 @@ Set in the dashboard (or Blueprint); **do not use localhost**:
 | `REVOLUT_EMAIL` / `REVOLUT_TOKEN` | Revolut API |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | optional |
 
-**Build:** `NPM_CONFIG_PRODUCTION=false npm install && npm run build`  
+**Build:** `npm run build` (installs devDependencies for `tsc` + Vite even when `NODE_ENV=production`)  
 **Start:** `npm start`
 
 If the build fails with `tsc: command not found`, `NODE_ENV=production` was set during install — use the build command above (see `render.yaml`).
@@ -93,5 +93,6 @@ https://next-performance-beta.vercel.app
 |---------|-----|
 | Vercel **404** on `/api/auth/google` | Set `API_BACKEND_URL=https://next-performance.onrender.com`, redeploy Vercel |
 | Redirect to **localhost** after login | On Render → Environment: set `APP_URL=https://next-performance.onrender.com` or **delete** the localhost value. Redeploy. Latest code also ignores localhost `APP_URL` and uses `RENDER_EXTERNAL_URL` / request Host. |
+| Build: `JSX.IntrinsicElements` / `tsc: command not found` | Set Render **Build Command** to `npm run build` (not plain `npm install && npm run build` without dev deps). |
 | `auth_failed` | Check Render logs; `GOOGLE_*`, `SESSION_SECRET` |
 | `no_access` | Add user in Supabase or `access.json` on Render |

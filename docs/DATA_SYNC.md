@@ -1,6 +1,8 @@
-# Data source: live Revolut API (no Supabase)
+# Data source: Revolut API + encrypted cache
 
-The dashboard does **not** use Supabase or Google Sheets. A local Node server mirrors your n8n pipeline:
+The dashboard reads **cached** performance data first (Supabase encrypted snapshot and/or disk), then refreshes from Revolut when needed. See **`docs/PERFORMANCE_CACHE.md`** for Supabase setup.
+
+Live sync mirrors your n8n pipeline:
 
 1. `POST /login` → session token  
 2. `GET /employees`  
@@ -32,6 +34,6 @@ Use the **same email/token** as in `revolut-finalGrades.json` (Revolut Login nod
 
 You can keep n8n writing to Sheets for backups. The web app reads Revolut directly and does not depend on that export.
 
-## Optional Supabase later
+## Encrypted Supabase cache
 
-Migrations under `supabase/migrations/` are unused when `VITE_BYPASS_AUTH=true`. Re-enable if you want auth + DB storage again.
+Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `PERFORMANCE_DATA_ENCRYPTION_KEY`, run migration `00006`, then `npm run cache:warm`. Details: `docs/PERFORMANCE_CACHE.md`.
