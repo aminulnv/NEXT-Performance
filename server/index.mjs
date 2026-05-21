@@ -44,13 +44,28 @@ const app = express()
 const port = Number(process.env.PORT || process.env.API_PORT) || 3001
 const CACHE_MS = Number(process.env.API_CACHE_MS) || 60 * 60 * 1000
 const STALE_REFRESH_MS = Number(process.env.STALE_REFRESH_MS) || 6 * 60 * 60 * 1000
-const appOrigin = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
+const defaultOrigin = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
+
+const corsAllowlist = new Set(
+  [
+    defaultOrigin,
+    'https://next-performance.onrender.com',
+    'https://next-performance-beta.vercel.app',
+    process.env.APP_URL?.replace(/\/$/, ''),
+  ].filter(Boolean),
+)
 
 app.set('trust proxy', 1)
 
 app.use(
   cors({
-    origin: appOrigin,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true)
+      if (corsAllowlist.has(origin.replace(/\/$/, ''))) return callback(null, true)
+      if (origin.endsWith('.vercel.app')) return callback(null, true)
+      if (process.env.NODE_ENV !== 'production') return callback(null, true)
+      callback(null, false)
+    },
     credentials: true,
   }),
 )
@@ -331,7 +346,7 @@ await seedPermissionsConfigIfEmpty()
 const server = app.listen(port, async () => {
   console.log(`Performance API listening on http://localhost:${port}`)
   if (isAuthEnabled()) {
-    console.log(`[auth] Google login enabled (APP_URL=${appOrigin})`)
+    console.log(`[auth] Google login enabled (default APP_URL=${defaultOrigin})`)
   } else {
     console.log('[auth] Disabled (VITE_BYPASS_AUTH=true or AUTH_DISABLED=true)')
   }

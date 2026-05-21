@@ -1,108 +1,95 @@
-# Deploy on Vercel (frontend) + API backend
+# Production hosting (Render + Vercel)
 
-Vercel only hosts the **Vite static app**. Google login and Revolut data need the **Express API** (`server/`). Use **two services**:
+Use **one primary URL** for your team. Both setups below are supported after the latest deploy.
 
-| Service | Hosts | Example |
-|---------|--------|---------|
-| **Vercel** | React UI (`dist/`) | `https://next-performance-beta.vercel.app` |
-| **Render** (or Railway) | Node API only | `https://next-performance-api.onrender.com` |
-
-Vercel **rewrites** `/api/*` to the backend so the browser stays on one origin (cookies + OAuth work).
+| URL | Role |
+|-----|------|
+| **https://next-performance.onrender.com** | **Recommended** — full app (UI + API) |
+| **https://next-performance-beta.vercel.app** | UI on Vercel, `/api` proxied to Render |
 
 ---
 
-## 1. Deploy the API (Render)
+## A. Render only (recommended)
 
-1. [Render](https://render.com) → **New → Web Service** → connect `aminulnv/NEXT-Performance`.
-2. Settings:
+Repo includes [`render.yaml`](../render.yaml). Connect the repo on [Render](https://render.com).
 
-| Field | Value |
-|-------|--------|
-| **Name** | `next-performance-api` |
-| **Root directory** | *(leave empty)* |
-| **Build command** | `npm install` |
-| **Start command** | `node server/index.mjs` |
-| **Instance** | Free (spins down when idle) |
+### Render environment variables
 
-3. **Environment** (same secrets as local `.env`, but production values):
+Set in the dashboard (or Blueprint); **do not use localhost**:
 
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
-| `APP_URL` | **`https://YOUR-VERCEL-APP.vercel.app`** (no trailing slash) — **never** `localhost` |
-| `NODE_ENV` | `production` |
-| `GOOGLE_CLIENT_ID` | Google OAuth |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth |
-| `SESSION_SECRET` | 32+ random characters |
+| `APP_URL` | `https://next-performance.onrender.com` |
+| `VITE_BYPASS_AUTH` | `false` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud |
+| `SESSION_SECRET` | 32+ random chars |
 | `ALLOWED_EMAIL_DOMAIN` | e.g. `nextventures.io` |
-| `VITE_BYPASS_AUTH` | `false` |
 | `REVOLUT_EMAIL` / `REVOLUT_TOKEN` | Revolut API |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | if using Supabase users |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | optional |
 
-4. Deploy and copy the public URL, e.g. `https://next-performance-api.onrender.com`.
+**Build:** `npm install && npm run build`  
+**Start:** `npm start`
 
-5. Smoke test (should redirect to Google or show an error page, not 404):
-
-   `https://next-performance-api.onrender.com/api/auth/google`
+Share **only** the Render URL with users.
 
 ---
 
-## 2. Configure Vercel
+## B. Vercel + Render API
 
-**Project → Settings → Environment Variables** (Production + Preview):
+### 1. Render (same service as A)
+
+Keep the API running at `https://next-performance.onrender.com`.
+
+You may **delete** `APP_URL` on Render or set it to either public URL — OAuth now uses the **request Host** (`x-forwarded-host`) so Vercel and Render both work.
+
+### 2. Vercel
+
+**Project → Settings → Environment Variables** (Production):
 
 | Variable | Value |
 |----------|--------|
-| `API_BACKEND_URL` | `https://next-performance-api.onrender.com` (no trailing slash) |
+| `API_BACKEND_URL` | `https://next-performance.onrender.com` |
 | `VITE_BYPASS_AUTH` | `false` |
 
-Plus any `VITE_*` vars you use in the client.
+Redeploy after saving. The repo includes:
 
-**Build:** The repo `vercel.json` runs `node scripts/prepare-vercel.mjs` then builds the app.  
-`prepare-vercel.mjs` reads `API_BACKEND_URL` and writes `/api` rewrites.
+- `api/[...path].js` — proxies `/api/*` to Render (fixes **404** on login)
+- `vercel.json` — SPA routing for React
 
-**Redeploy** after setting `API_BACKEND_URL`.
+### 3. Google Cloud OAuth
+
+Add **both** redirect URIs if you use both hosts:
+
+```text
+https://next-performance.onrender.com/api/auth/google/callback
+https://next-performance-beta.vercel.app/api/auth/google/callback
+```
+
+**Authorized JavaScript origins:**
+
+```text
+https://next-performance.onrender.com
+https://next-performance-beta.vercel.app
+```
 
 ---
 
-## 3. Google Cloud OAuth
+## Verify
 
-[Credentials](https://console.cloud.google.com/apis/credentials) → your **Web client**:
-
-| Field | Value |
-|-------|--------|
-| **Authorized JavaScript origins** | `https://YOUR-VERCEL-APP.vercel.app` |
-| **Authorized redirect URIs** | `https://YOUR-VERCEL-APP.vercel.app/api/auth/google/callback` |
-
-Use the **Vercel** URL, not the Render URL. The browser only talks to Vercel; Vercel proxies `/api` to Render.
-
-`APP_URL` on Render must match the Vercel URL exactly.
-
----
-
-## 4. Verify
-
-1. Open `https://YOUR-VERCEL-APP.vercel.app/api/auth/google`  
-   → should redirect to **accounts.google.com** (not 404).
-2. Sign in with an email on your access list (Supabase / `access.json` on the API host).
-3. Dashboard loads performance data (first load can take 1–2 minutes).
+| Test | Expected |
+|------|----------|
+| `https://next-performance.onrender.com/api/auth/google` | Redirect to Google |
+| `https://next-performance-beta.vercel.app/api/auth/google` | Redirect to Google (not 404) |
+| After Google login | Same host you started from (not `localhost`) |
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Fix |
+| Problem | Fix |
 |---------|-----|
-| **Redirect to `localhost:5173` after Google login** | On **Render**, set `APP_URL=https://YOUR-VERCEL-APP.vercel.app` (not localhost). Update Google redirect URI to the same Vercel URL. Redeploy API. |
-| `/api/auth/google` 404 on Vercel | Set `API_BACKEND_URL` and redeploy |
-| Redirect to Google then `auth_failed` | Check Render logs; verify `GOOGLE_*`, `SESSION_SECRET`, `APP_URL` |
-| `domain_not_allowed` | `ALLOWED_EMAIL_DOMAIN` must match email domain |
-| `no_access` | Add user in Supabase `dashboard_users` or API `access.json` |
-| Login works, no data | `REVOLUT_*` on Render; run `npm run cache:warm` on Render shell if needed |
-| Cold start / timeout | Render free tier sleeps; first request may be slow. Long Revolut refresh runs on **Render**, not Vercel’s 10s function limit (rewrite proxies to Render). |
-
----
-
-## Single-host alternative
-
-If two services is too much, deploy **only on Render** with `npm run build && npm start` — one URL, no Vercel proxy. See `docs/SUPABASE_GO_LIVE.md` §6.
+| Vercel **404** on `/api/auth/google` | Set `API_BACKEND_URL=https://next-performance.onrender.com`, redeploy Vercel |
+| Redirect to **localhost** after login | Remove `APP_URL=http://localhost:5173` from Render; redeploy Render with latest code |
+| `auth_failed` | Check Render logs; `GOOGLE_*`, `SESSION_SECRET` |
+| `no_access` | Add user in Supabase or `access.json` on Render |

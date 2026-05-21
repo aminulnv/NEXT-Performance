@@ -12,9 +12,10 @@
 1. [Google Cloud Console](https://console.cloud.google.com/) → create or select a project.
 2. **APIs & Services → OAuth consent screen** → Internal (Workspace) if available.
 3. **Credentials → Create OAuth client ID → Web application**
-4. **Authorized redirect URIs:**
-   - `http://localhost:5173/api/auth/google/callback` (dev with Vite proxy)
-   - `https://your-production-domain/api/auth/google/callback`
+4. **Authorized redirect URIs** (add every host users open in the browser):
+   - `http://localhost:5173/api/auth/google/callback` (local dev)
+   - `https://next-performance.onrender.com/api/auth/google/callback`
+   - `https://next-performance-beta.vercel.app/api/auth/google/callback`
 5. Copy **Client ID** and **Client secret**.
 
 ## 2. Environment variables
