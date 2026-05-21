@@ -8,6 +8,8 @@
     "dev:web": "vite",
     "dev:api": "node --watch server/index.mjs",
     "build": "tsc -b && vite build",
+    "build:app": "tsc -b && vite build",
+    "build:vercel": "node scripts/prepare-vercel.mjs && npm run build:app",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server/index.mjs",

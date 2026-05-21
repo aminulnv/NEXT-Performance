@@ -24,8 +24,8 @@ Legacy paths (`/reviews/*`, `/insights/*`, `/employees`, `/overview`, etc.) redi
 ## Quick start
 
 ```bash
-cd performance-dashboard
 cp .env.example .env
+cp server/data/access.json.example server/data/access.json
 ```
 
 Edit `.env`:
@@ -67,6 +67,13 @@ Set `INCLUDE_ALL_SCORECARDS=true` (default) to embed every scorecard for a grade
 ## Auth and roles
 
 See [`docs/AUTH.md`](docs/AUTH.md). Set `VITE_BYPASS_AUTH=false`, configure Google OAuth in `.env`, add users under **Admin → Access**, and edit role page lists in `src/config/permissions.json`.
+
+## Hosting
+
+| Platform | Guide |
+|----------|--------|
+| **Vercel** (UI) + Render/Railway (API) | [`docs/DEPLOY_VERCEL.md`](docs/DEPLOY_VERCEL.md) |
+| **Render** (full stack, recommended) | `npm run build && npm start` — see [`docs/SUPABASE_GO_LIVE.md`](docs/SUPABASE_GO_LIVE.md) §6 |
 
 ## Supabase (go-live)
 
