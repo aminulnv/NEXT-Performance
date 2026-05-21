@@ -6,7 +6,8 @@ services:
     runtime: node
     plan: free
     # Install devDependencies (vite, typescript) even when NODE_ENV=production
-    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npm run build
+    # NODE_ENV=production skips devDependencies unless we opt in (typescript, vite, @types/react).
+    buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:
