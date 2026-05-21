@@ -7,7 +7,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { buildCacheFromRevolut, saveCache } from './buildCache.mjs'
 import { readDiskCache } from './diskCache.mjs'
-import { importGoalsFromCsv, loadGoalsDataset } from './goalsStore.mjs'
+import { importGoalsFromCsv, loadGoalsDataset, goalsStorageBackend } from './goalsStore.mjs'
 import {
   registerAuthRoutes,
   requireAuth,
@@ -265,6 +265,7 @@ app.get('/api/health', (_req, res) => {
     permissionsStorage: getPermissionsCacheMeta().source,
     supabase: isSupabaseConfigured(),
     performanceCache: isPerformanceSupabaseCacheEnabled() ? 'supabase-encrypted' : 'disk',
+    goalsStorage: goalsStorageBackend(),
   })
 })
 
@@ -298,7 +299,9 @@ app.post('/api/goals', requireAuth, async (req, res) => {
     if (!csvText.trim()) {
       return res.status(400).json({ error: 'Request body must be CSV text (Content-Type: text/csv)' })
     }
-    const data = await importGoalsFromCsv(csvText)
+    const data = await importGoalsFromCsv(csvText, {
+      importedBy: req.user?.email ?? null,
+    })
     res.json({
       goals: data.goals,
       columns: data.columns,
@@ -306,6 +309,7 @@ app.post('/api/goals', requireAuth, async (req, res) => {
       importedAt: data.importedAt,
       source: data.source,
       goalCount: data.goals.length,
+      importedBy: data.importedBy ?? null,
     })
   } catch (err) {
     console.error(err)

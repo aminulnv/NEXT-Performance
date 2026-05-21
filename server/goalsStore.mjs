@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseGoalsCsv } from './parseGoalsCsv.mjs'
+import { isSupabaseConfigured } from './supabaseAdmin.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const GOALS_CACHE_FILE = path.join(__dirname, '.cache', 'goals.json')
@@ -14,6 +15,20 @@ const EMPTY_DATASET = {
   source: 'none',
   sourcePath: null,
   hint: 'Export Goals from Revolut People as CSV and upload on Goals or Analytics → Monitoring.',
+}
+
+let supabaseGoals = null
+
+async function getSupabaseGoals() {
+  if (!isSupabaseConfigured()) return null
+  if (!supabaseGoals) {
+    supabaseGoals = await import('./goalsStoreSupabase.mjs')
+  }
+  return supabaseGoals
+}
+
+export function goalsStorageBackend() {
+  return isSupabaseConfigured() ? 'supabase' : 'file'
 }
 
 async function readGoalsCache() {
@@ -35,7 +50,7 @@ async function writeGoalsCache(payload) {
   await fs.rename(tmp, GOALS_CACHE_FILE)
 }
 
-export async function importGoalsFromCsv(csvText, { persist = true } = {}) {
+export async function importGoalsFromCsv(csvText, { persist = true, importedBy } = {}) {
   const parsed = parseGoalsCsv(csvText)
   const payload = {
     goals: parsed.goals,
@@ -45,12 +60,24 @@ export async function importGoalsFromCsv(csvText, { persist = true } = {}) {
     source: 'upload',
     sourcePath: null,
   }
-  if (persist) await writeGoalsCache(payload)
+  if (!persist) return payload
+
+  const store = await getSupabaseGoals()
+  if (store) {
+    return store.saveGoalsToSupabase(payload, { importedBy })
+  }
+  await writeGoalsCache(payload)
   return payload
 }
 
-/** Goals are only loaded from a prior CSV upload (POST /api/goals), not from disk paths. */
+/** Goals from latest CSV upload (Supabase when configured, else server/.cache/goals.json). */
 export async function loadGoalsDataset() {
+  const store = await getSupabaseGoals()
+  if (store) {
+    const fromDb = await store.loadGoalsFromSupabase()
+    if (fromDb) return fromDb
+    return { ...EMPTY_DATASET, source: 'none' }
+  }
   const cached = await readGoalsCache()
   return cached ?? EMPTY_DATASET
 }

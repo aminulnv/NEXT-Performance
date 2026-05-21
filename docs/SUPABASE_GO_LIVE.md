@@ -106,7 +106,7 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 | `dashboard_users` | Email, role, employee_id — **who can log in** |
 | `performance_encrypted_cache` | Encrypted Revolut snapshot (API reads this first when configured) |
 | `performance_records` | Legacy plaintext schema (unused by API; prefer encrypted cache) |
-| `goals_imports` | Optional persisted goals CSV |
+| `goals_imports` | Shared goals CSV (latest upload; API writes with service role) |
 | `profiles` | Optional link to Supabase Auth users |
 | `saved_metric_views` | Per-user saved explore views |
 

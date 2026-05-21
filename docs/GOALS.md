@@ -8,9 +8,11 @@ Goals data is shown **only after you upload** that CSV in the dashboard (Goals o
 
 1. In Revolut People: **Goals → Export** (CSV).
 2. Open **Goals** or **Analytics → Monitoring**.
-3. Choose the CSV file. The server parses it and stores the result in `server/.cache/goals.json` (upload session only — not a folder drop).
+3. Choose the CSV file. The server parses it and stores the result for everyone:
+   - **Production (Supabase configured):** `goals_imports` — each upload replaces the shared row; all users and API instances see the same data.
+   - **Local without Supabase:** `server/.cache/goals.json` on that machine only.
 
-Use **Refresh** to re-fetch the last upload without selecting the file again (same browser session / server restart until cache is cleared).
+Use **Refresh** to re-fetch the last upload without selecting the file again.
 
 ## Joining to performance data
 
