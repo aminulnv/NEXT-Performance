@@ -12,6 +12,7 @@ import {
   registerAuthRoutes,
   requireAuth,
   isAuthEnabled,
+  validateAppUrlForProduction,
 } from './auth.mjs'
 import { registerAccessRoutes } from './accessRoutes.mjs'
 import { registerPermissionsRoutes } from './permissionsRoutes.mjs'
@@ -36,6 +37,8 @@ import { isSupabaseConfigured, getSupabaseConfigHint } from './supabaseAdmin.mjs
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distPath = path.join(__dirname, '..', 'dist')
+
+validateAppUrlForProduction()
 
 const app = express()
 const port = Number(process.env.PORT || process.env.API_PORT) || 3001

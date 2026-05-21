@@ -29,7 +29,8 @@ Vercel **rewrites** `/api/*` to the backend so the browser stays on one origin (
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
-| `APP_URL` | **`https://YOUR-VERCEL-APP.vercel.app`** (no trailing slash) |
+| `APP_URL` | **`https://YOUR-VERCEL-APP.vercel.app`** (no trailing slash) — **never** `localhost` |
+| `NODE_ENV` | `production` |
 | `GOOGLE_CLIENT_ID` | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `SESSION_SECRET` | 32+ random characters |
@@ -92,6 +93,7 @@ Use the **Vercel** URL, not the Render URL. The browser only talks to Vercel; Ve
 
 | Symptom | Fix |
 |---------|-----|
+| **Redirect to `localhost:5173` after Google login** | On **Render**, set `APP_URL=https://YOUR-VERCEL-APP.vercel.app` (not localhost). Update Google redirect URI to the same Vercel URL. Redeploy API. |
 | `/api/auth/google` 404 on Vercel | Set `API_BACKEND_URL` and redeploy |
 | Redirect to Google then `auth_failed` | Check Render logs; verify `GOOGLE_*`, `SESSION_SECRET`, `APP_URL` |
 | `domain_not_allowed` | `ALLOWED_EMAIL_DOMAIN` must match email domain |

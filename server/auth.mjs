@@ -6,6 +6,33 @@ function getAppUrl() {
   return (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
 }
 
+/** Always send users to APP_URL (Vercel), not the API host or localhost. */
+function redirectToApp(res, path) {
+  const base = getAppUrl()
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return res.redirect(path)
+  }
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return res.redirect(`${base}${normalized}`)
+}
+
+export function validateAppUrlForProduction() {
+  if (process.env.NODE_ENV !== 'production') return
+  const url = process.env.APP_URL?.trim()
+  if (!url) {
+    console.error(
+      '[auth] FATAL: Set APP_URL to your public site (e.g. https://your-app.vercel.app) in production.',
+    )
+    process.exit(1)
+  }
+  if (/localhost|127\.0\.0\.1/i.test(url)) {
+    console.error(
+      `[auth] FATAL: APP_URL must not be localhost in production (got ${url}). Users will be redirected to your machine after Google login.`,
+    )
+    process.exit(1)
+  }
+}
+
 function getOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -57,14 +84,14 @@ export function registerAuthRoutes(app) {
   app.get('/api/auth/google/callback', async (req, res) => {
     const code = req.query.code
     if (!code || typeof code !== 'string') {
-      return res.redirect('/login?error=missing_code')
+      return redirectToApp(res, '/login?error=missing_code')
     }
 
     try {
       const client = getOAuthClient()
       const { tokens } = await client.getToken(code)
       if (!tokens.id_token) {
-        return res.redirect('/login?error=no_id_token')
+        return redirectToApp(res, '/login?error=no_id_token')
       }
 
       const ticket = await client.verifyIdToken({
@@ -73,18 +100,18 @@ export function registerAuthRoutes(app) {
       })
       const payload = ticket.getPayload()
       if (!payload?.email) {
-        return res.redirect('/login?error=no_email')
+        return redirectToApp(res, '/login?error=no_email')
       }
 
       const email = payload.email.toLowerCase()
       const domain = allowedDomain()
       if (domain && !email.endsWith(`@${domain}`)) {
-        return res.redirect('/login?error=domain_not_allowed')
+        return redirectToApp(res, '/login?error=domain_not_allowed')
       }
 
       const access = await resolveUserRole(email, payload.name)
       if (!access) {
-        return res.redirect('/login?error=no_access')
+        return redirectToApp(res, '/login?error=no_access')
       }
 
       attachSessionUser(req.session, {
@@ -98,10 +125,10 @@ export function registerAuthRoutes(app) {
 
       const redirectTo = typeof req.session.returnTo === 'string' ? req.session.returnTo : '/'
       delete req.session.returnTo
-      res.redirect(redirectTo)
+      redirectToApp(res, redirectTo)
     } catch (err) {
       console.error('[auth] callback failed:', err)
-      res.redirect('/login?error=auth_failed')
+      redirectToApp(res, '/login?error=auth_failed')
     }
   })
 
