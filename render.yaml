@@ -5,7 +5,8 @@ services:
     name: next-performance
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # Install devDependencies (vite, typescript) even when NODE_ENV=production
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:

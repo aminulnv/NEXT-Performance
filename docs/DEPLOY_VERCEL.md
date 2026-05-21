@@ -28,8 +28,10 @@ Set in the dashboard (or Blueprint); **do not use localhost**:
 | `REVOLUT_EMAIL` / `REVOLUT_TOKEN` | Revolut API |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | optional |
 
-**Build:** `npm install && npm run build`  
+**Build:** `NPM_CONFIG_PRODUCTION=false npm install && npm run build`  
 **Start:** `npm start`
+
+If the build fails with `tsc: command not found`, `NODE_ENV=production` was set during install — use the build command above (see `render.yaml`).
 
 Share **only** the Render URL with users.
 
