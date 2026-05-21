@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+*.local
+
+# Local API cache (large)
+server/.cache/
+
+# Env (do not commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Local dashboard users (use access.json.example or Admin → Access / Supabase)
+server/data/access.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.log
+*.tsbuildinfo

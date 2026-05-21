@@ -1,0 +1,164 @@
+import { parse } from 'csv-parse/sync'
+import { createHash } from 'crypto'
+
+const COLUMN_ALIASES = {
+  employeeId: [
+    'employee id',
+    'reviewed employee id',
+    'employee_id',
+    'owner id',
+    'assignee id',
+    'user id',
+  ],
+  employeeName: [
+    'employee',
+    'employee name',
+    'reviewed employee',
+    'owner full name',
+    'assignee',
+    'name',
+  ],
+  owner: ['owner', 'owner email', 'assignee email'],
+  ownerFullName: ['owner full name'],
+  cycleName: ['cycle', 'cycle name', 'period', 'review cycle', 'goal cycle'],
+  title: ['goal', 'goal title', 'title', 'objective', 'key result', 'goal name', 'okr'],
+  status: ['goal status', 'status', 'state', 'progress status'],
+  progress: ['progress', 'completion', 'completion %', 'completion percent', '% complete'],
+  goalId: ['goal id', 'goal_id'],
+  approvalStatus: ['approval status', 'approval'],
+  organisationUnit: ['organisation unit', 'organization unit', 'org unit'],
+  organisationName: ['organisation name', 'organization name', 'org name'],
+  currentValue: ['current value', 'current'],
+  initialValue: ['initial value', 'initial'],
+}
+
+function normalizeHeader(header) {
+  return String(header ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function pickColumn(headers, aliases) {
+  const normalized = headers.map(normalizeHeader)
+  for (const alias of aliases) {
+    const index = normalized.indexOf(alias)
+    if (index >= 0) return headers[index]
+  }
+  return null
+}
+
+function rowId(row, index) {
+  const key = [
+    row.employee_id,
+    row.employee_name,
+    row.cycle_name,
+    row.title,
+    row.status,
+    index,
+  ]
+    .filter(Boolean)
+    .join('|')
+  return createHash('sha256').update(key).digest('hex').slice(0, 16)
+}
+
+/**
+ * Parse Revolut Goals CSV export into normalized records.
+ * Unknown columns are kept on `fields` so the UI can show them before mapping is confirmed.
+ */
+export function parseGoalsCsv(csvText) {
+  const trimmed = String(csvText ?? '').trim()
+  if (!trimmed) {
+    return { goals: [], columns: [], columnMap: {} }
+  }
+
+  const rows = parse(trimmed, {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+    bom: true,
+  })
+
+  if (!rows.length) {
+    return { goals: [], columns: [], columnMap: {} }
+  }
+
+  const headers = Object.keys(rows[0])
+  const columnMap = {
+    employeeId: pickColumn(headers, COLUMN_ALIASES.employeeId),
+    employeeName: pickColumn(headers, COLUMN_ALIASES.employeeName),
+    owner: pickColumn(headers, COLUMN_ALIASES.owner),
+    ownerFullName: pickColumn(headers, COLUMN_ALIASES.ownerFullName),
+    cycleName: pickColumn(headers, COLUMN_ALIASES.cycleName),
+    title: pickColumn(headers, COLUMN_ALIASES.title),
+    status: pickColumn(headers, COLUMN_ALIASES.status),
+    progress: pickColumn(headers, COLUMN_ALIASES.progress),
+    goalId: pickColumn(headers, COLUMN_ALIASES.goalId),
+    approvalStatus: pickColumn(headers, COLUMN_ALIASES.approvalStatus),
+    organisationUnit: pickColumn(headers, COLUMN_ALIASES.organisationUnit),
+    organisationName: pickColumn(headers, COLUMN_ALIASES.organisationName),
+    currentValue: pickColumn(headers, COLUMN_ALIASES.currentValue),
+    initialValue: pickColumn(headers, COLUMN_ALIASES.initialValue),
+  }
+
+  const str = (value) => {
+    if (value == null || value === '') return null
+    return String(value).trim() || null
+  }
+
+  const goals = rows.map((raw, index) => {
+    const fields = {}
+    for (const [key, value] of Object.entries(raw)) {
+      fields[key] = value == null ? '' : String(value)
+    }
+
+    const employee_id = str(columnMap.employeeId ? raw[columnMap.employeeId] : null)
+    const owner = str(columnMap.owner ? raw[columnMap.owner] : null)
+    const employee_name =
+      str(columnMap.employeeName ? raw[columnMap.employeeName] : null) ??
+      str(columnMap.ownerFullName ? raw[columnMap.ownerFullName] : null)
+    const owner_full_name = str(
+      columnMap.ownerFullName ? raw[columnMap.ownerFullName] : null,
+    )
+    const cycle_name = str(columnMap.cycleName ? raw[columnMap.cycleName] : null)
+    const review_cycle = cycle_name
+    const title = str(columnMap.title ? raw[columnMap.title] : null)
+    const status = str(columnMap.status ? raw[columnMap.status] : null)
+    const progress = str(columnMap.progress ? raw[columnMap.progress] : null)
+    const goal_id = str(columnMap.goalId ? raw[columnMap.goalId] : null)
+    const approval_status = str(
+      columnMap.approvalStatus ? raw[columnMap.approvalStatus] : null,
+    )
+    const organisation_unit = str(
+      columnMap.organisationUnit ? raw[columnMap.organisationUnit] : null,
+    )
+    const organisation_name = str(
+      columnMap.organisationName ? raw[columnMap.organisationName] : null,
+    )
+    const current_value = str(columnMap.currentValue ? raw[columnMap.currentValue] : null)
+    const initial_value = str(columnMap.initialValue ? raw[columnMap.initialValue] : null)
+
+    return {
+      id: rowId({ employee_id, employee_name, cycle_name, title, status }, index),
+      employee_id,
+      employee_name,
+      owner: owner ?? employee_id,
+      owner_full_name,
+      cycle_name,
+      review_cycle,
+      title,
+      status,
+      progress,
+      goal_id,
+      approval_status,
+      organisation_unit,
+      organisation_name,
+      current_value,
+      initial_value,
+      fields,
+    }
+  })
+
+  return { goals, columns: headers, columnMap }
+}

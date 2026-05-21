@@ -1,0 +1,117 @@
+# Supabase go-live setup
+
+Use Supabase for **persistent user access** (no more lost `access.json` on redeploy).  
+**Google login** stays on your Express API; **Revolut data** still syncs to server cache (or optional `performance_records` table later).
+
+---
+
+## 1. Run migrations in Supabase
+
+Open your project → **SQL Editor** → run each file **in order**:
+
+| Order | File |
+|-------|------|
+| 1 | `supabase/migrations/00001_profiles.sql` |
+| 2 | `supabase/migrations/00002_performance.sql` |
+| 3 | `supabase/migrations/00003_dashboard_access.sql` |
+| 4 | `supabase/migrations/00004_goals_storage.sql` |
+| 5 | `supabase/migrations/00005_performance_rls_by_role.sql` |
+| 6 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+
+---
+
+## 2. Get API keys
+
+**Project Settings → API**
+
+| Key | Where | Use |
+|-----|--------|-----|
+| Project URL | `SUPABASE_URL` | Server `.env` |
+| `service_role` | `SUPABASE_SERVICE_ROLE_KEY` | **Server only** — access admin, never in browser |
+| `anon` / publishable | `VITE_SUPABASE_ANON_KEY` | Optional future client reads |
+
+---
+
+## 3. Server `.env` (production)
+
+```env
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Existing (keep)
+APP_URL=https://your-domain.com
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+SESSION_SECRET=...
+ALLOWED_EMAIL_DOMAIN=nextventures.io
+VITE_BYPASS_AUTH=false
+REVOLUT_EMAIL=...
+REVOLUT_TOKEN=...
+```
+
+When `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set, the app uses **`dashboard_users`** instead of `server/data/access.json`.
+
+Check: `GET /api/health` → `"accessStorage": "supabase"`.
+
+---
+
+## 4. Add users (no file editing)
+
+**After** migrations + env:
+
+```bash
+# From access.json (one-time)
+npm run access:migrate-supabase
+
+# Or CSV (same as before)
+npm run access:import -- server/data/users.csv
+```
+
+**Or** log in as admin → **Admin → Access** → add / bulk CSV (writes to Supabase).
+
+---
+
+## 5. Google OAuth (unchanged)
+
+Still configure in **Google Cloud**, not Supabase Auth (for now):
+
+- Redirect: `https://YOUR-DOMAIN/api/auth/google/callback`
+- `APP_URL=https://YOUR-DOMAIN`
+
+Supabase Auth + Google is optional later; current flow uses Express sessions.
+
+---
+
+## 6. Hosting
+
+| Host | Frontend | API + Supabase |
+|------|----------|----------------|
+| **Render / Railway / Fly / VPS** | `dist/` via Express | Recommended — one app, `npm start` |
+| **Vercel** | Static only | Deploy API elsewhere; point `/api` proxy to API host |
+
+Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
+
+---
+
+## 7. Tables created
+
+| Table | Purpose |
+|-------|---------|
+| `dashboard_users` | Email, role, employee_id — **who can log in** |
+| `performance_records` | Optional DB copy of Revolut data (API still uses cache today) |
+| `goals_imports` | Optional persisted goals CSV |
+| `profiles` | Optional link to Supabase Auth users |
+| `saved_metric_views` | Per-user saved explore views |
+
+---
+
+## 8. Go-live checklist
+
+- [ ] All 5 migrations run in SQL Editor  
+- [ ] Seed admin user (`dashboard_users`)  
+- [ ] `SUPABASE_*` set on production host  
+- [ ] `APP_URL` + Google redirect = production domain  
+- [ ] `VITE_BYPASS_AUTH=false` and **rebuild** frontend  
+- [ ] `/api/health` shows `supabase: true`, `accessStorage: supabase`  
+- [ ] Test Google login + Admin → Access add user  
+- [ ] `npm run cache:warm` on server for Revolut data  
