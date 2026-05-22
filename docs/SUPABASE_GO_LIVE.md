@@ -17,7 +17,8 @@ Open your project → **SQL Editor** → run each file **in order**:
 | 4 | `supabase/migrations/00004_goals_storage.sql` |
 | 5 | `supabase/migrations/00005_performance_rls_by_role.sql` |
 | 6 | `supabase/migrations/00006_performance_encrypted_cache.sql` |
-| 7 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+| 7 | `supabase/migrations/00007_employees_directory.sql` |
+| 8 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
 
 ---
 

@@ -33,7 +33,12 @@ import {
   canForceRefresh,
   roleHasPage,
 } from './permissions.mjs'
+import { fetchRevolutEmployeesList } from './revolutEmployees.mjs'
 import { accessStorageBackend } from './accessStore.mjs'
+import {
+  isEmployeesSupabaseEnabled,
+  loadEmployeesFromSupabase,
+} from './employeesStoreSupabase.mjs'
 import { isSupabaseConfigured, getSupabaseConfigHint } from './supabaseAdmin.mjs'
 import {
   loadPerformanceCacheFromSupabase,
@@ -167,6 +172,7 @@ async function loadDiskIntoMemory() {
     recordCount: disk.recordCount,
     records: disk.records,
     employeesByEmail: disk.employeesByEmail ?? null,
+    employeesDirectory: disk.employeesDirectory ?? null,
     cacheStatus: 'disk',
   }
   memoryCacheAt = Date.now()
@@ -192,6 +198,7 @@ async function loadPersistedCache() {
     recordCount: disk.recordCount,
     records: disk.records,
     employeesByEmail: disk.employeesByEmail ?? null,
+    employeesDirectory: disk.employeesDirectory ?? null,
     cacheStatus: 'disk',
   }
 }
@@ -265,6 +272,7 @@ app.get('/api/health', (_req, res) => {
     permissionsStorage: getPermissionsCacheMeta().source,
     supabase: isSupabaseConfigured(),
     performanceCache: isPerformanceSupabaseCacheEnabled() ? 'supabase-encrypted' : 'disk',
+    employeesStorage: isEmployeesSupabaseEnabled() ? 'supabase' : 'local',
     goalsStorage: goalsStorageBackend(),
   })
 })
@@ -352,6 +360,101 @@ app.get(
   },
 )
 
+app.get(
+  '/api/employees',
+  requireAuth,
+  requirePerformanceApiAccess,
+  async (req, res) => {
+    try {
+      const force = req.query.refresh === '1'
+      if (force && isAuthEnabled() && !canForceRefresh(req.user?.role)) {
+        return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
+      }
+
+      if (!force && memoryCache?.employeesDirectory?.length) {
+        return res.json({
+          employees: memoryCache.employeesDirectory,
+          count: memoryCache.employeesDirectory.length,
+          fetchedAt: memoryCache.fetchedAt,
+          source: memoryCache.cacheStatus ?? 'memory',
+          refreshing: Boolean(refreshInFlight),
+        })
+      }
+
+      if (!force) {
+        try {
+          const fromSupabase = await loadEmployeesFromSupabase()
+          if (fromSupabase?.employees.length) {
+            if (memoryCache) {
+              memoryCache.employeesDirectory = fromSupabase.employees
+              memoryCache.fetchedAt = fromSupabase.fetchedAt ?? memoryCache.fetchedAt
+            }
+            return res.json({
+              employees: fromSupabase.employees,
+              count: fromSupabase.count,
+              fetchedAt: fromSupabase.fetchedAt,
+              source: fromSupabase.source,
+              refreshing: Boolean(refreshInFlight),
+            })
+          }
+        } catch (err) {
+          console.warn('[employees] Supabase read failed:', err instanceof Error ? err.message : err)
+        }
+      }
+
+      if (!force) {
+        const persisted = await loadPersistedCache()
+        if (persisted?.employeesDirectory?.length) {
+          applyMemoryCache({
+            ...persisted,
+            employeesDirectory: persisted.employeesDirectory,
+          })
+          return res.json({
+            employees: persisted.employeesDirectory,
+            count: persisted.employeesDirectory.length,
+            fetchedAt: persisted.fetchedAt,
+            source: persisted.cacheStatus ?? 'disk',
+            refreshing: Boolean(refreshInFlight),
+          })
+        }
+      }
+
+      const fetched = await fetchRevolutEmployeesList()
+      if (memoryCache) {
+        memoryCache.employeesDirectory = fetched.employeesDirectory
+        memoryCache.employeesByEmail = {
+          ...(memoryCache.employeesByEmail ?? {}),
+          ...fetched.index,
+        }
+        memoryCache.fetchedAt = fetched.fetchedAt
+      } else {
+        memoryCache = {
+          fetchedAt: fetched.fetchedAt,
+          recordCount: 0,
+          records: [],
+          employeesByEmail: fetched.index,
+          employeesDirectory: fetched.employeesDirectory,
+          cacheStatus: 'live-employees',
+        }
+        memoryCacheAt = Date.now()
+      }
+
+      res.json({
+        employees: fetched.employeesDirectory,
+        count: fetched.count,
+        fetchedAt: fetched.fetchedAt,
+        source: 'revolut',
+        refreshing: Boolean(refreshInFlight),
+      })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to load employees from Revolut',
+      })
+    }
+  },
+)
+
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath))
   app.get('*', (req, res, next) => {
@@ -381,6 +484,9 @@ const server = app.listen(port, async () => {
   }
   if (isPerformanceSupabaseCacheEnabled()) {
     console.log('[cache] Encrypted performance snapshot → performance_encrypted_cache')
+  }
+  if (isEmployeesSupabaseEnabled()) {
+    console.log('[employees] Directory → employees table')
   }
   const loaded = await loadDiskIntoMemory()
   if (loaded) {

@@ -3,7 +3,7 @@ import { revolutLogin, revolutRequest, sleep } from './revolutHttp.mjs'
 const PAGE_SIZE = 100
 const INCLUDE_SCORECARDS = process.env.INCLUDE_SCORECARDS !== 'false'
 
-async function fetchAllPages(token, path, query = {}, maxPages = 50) {
+export async function fetchAllPages(token, path, query = {}, maxPages = 50) {
   const all = []
   let page = 1
   let totalCount = null
@@ -134,10 +134,7 @@ async function fetchScorecardPayload(token) {
 export async function loadRevolutPerformanceDataset({ email, token: apiToken }) {
   const sessionToken = await revolutLogin(email, apiToken)
 
-  const employeesResp = await revolutRequest(sessionToken, '/employees', {
-    page: 1,
-    page_size: 1000,
-  })
+  const employeesList = await fetchAllPages(sessionToken, '/employees', {}, 20)
   await sleep(500)
 
   const gradesResults = await fetchAllPages(sessionToken, '/performance/finalGrades', {}, 20)
@@ -151,7 +148,6 @@ export async function loadRevolutPerformanceDataset({ email, token: apiToken }) 
     scorecardPayload = await fetchScorecardPayload(sessionToken)
   }
 
-  const employeesList = employeesResp.results ?? employeesResp.data ?? []
   const gradesResp = { results: gradesResults, count: gradesResults.length }
 
   return {

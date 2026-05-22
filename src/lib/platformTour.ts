@@ -49,7 +49,7 @@ export const PLATFORM_TOUR_STEPS: TourStep[] = [
   {
     id: 'organization',
     title: 'Organization',
-    body: 'Departments shows team structure and grades. People lists employees — open someone for their review history.',
+    body: 'Departments shows team structure and grades. People lists the full Revolut employee directory — open someone for their review history.',
     target: '[data-tour="nav-organization"]',
     placement: 'right',
     requiresAnyPage: ['organization.departments', 'organization.people'],

@@ -2,7 +2,9 @@ import { loadRevolutPerformanceDataset } from './revolutData.mjs'
 import { flattenGrades } from './flatten.mjs'
 import { writeDiskCache } from './diskCache.mjs'
 import { buildEmployeesByEmailFromList } from './employeeLookup.mjs'
+import { normalizeEmployeesList } from './employeeDirectory.mjs'
 import { savePerformanceCacheToSupabase } from './performanceStoreSupabase.mjs'
+import { syncEmployeesToSupabase } from './employeesStoreSupabase.mjs'
 
 export function getCredentials() {
   const email = process.env.REVOLUT_EMAIL
@@ -51,12 +53,14 @@ export async function buildCacheFromRevolut() {
 
   const fetchedAt = new Date().toISOString()
   const records = rows.map(rowToRecord)
+  const employeesDirectory = normalizeEmployeesList(dataset.employeesList)
 
   return {
     fetchedAt,
     recordCount: records.length,
     records,
     employeesByEmail: buildEmployeesByEmailFromList(dataset.employeesList),
+    employeesDirectory,
     cacheStatus: 'live',
   }
 }
@@ -66,10 +70,21 @@ export async function saveCache(data) {
     fetchedAt: data.fetchedAt,
     recordCount: data.recordCount,
     records: data.records,
+    employeesByEmail: data.employeesByEmail ?? null,
+    employeesDirectory: data.employeesDirectory ?? null,
   })
   const savedToSupabase = await savePerformanceCacheToSupabase(data)
   if (savedToSupabase) {
     console.log(`[cache] Encrypted snapshot saved to Supabase (${data.recordCount} records)`)
+  }
+  const syncedEmployees = await syncEmployeesToSupabase(data.employeesDirectory, data.fetchedAt).catch(
+    (err) => {
+      console.warn('[employees] Supabase sync failed:', err instanceof Error ? err.message : err)
+      return false
+    },
+  )
+  if (syncedEmployees) {
+    console.log(`[employees] Synced ${data.employeesDirectory.length} rows to Supabase`)
   }
 }
 

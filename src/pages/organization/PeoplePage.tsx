@@ -1,62 +1,60 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { usePerformanceData } from '@/hooks/usePerformanceData'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
-import { dedupeEmployees, uniqueFieldValues } from '@/lib/metrics'
-import { readPeopleFilters } from '@/lib/peopleFilters'
 import { routes } from '@/lib/routes'
 import '@/styles/performance.css'
 
+function uniqueValues(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter(Boolean) as string[])].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }),
+  )
+}
+
 export default function PeoplePage() {
-  const { records, loading, error, reload } = usePerformanceData()
-  const [searchParams] = useSearchParams()
-  const urlFilters = readPeopleFilters(searchParams)
-
+  const { employees, count, loading, error, fetchedAt, source, reload } = useEmployeesDirectory()
   const [search, setSearch] = useState('')
-  const [cycleFilter, setCycleFilter] = useState(urlFilters.cycle ?? '')
-  const [departmentFilter, setDepartmentFilter] = useState(urlFilters.department ?? '')
+  const [departmentFilter, setDepartmentFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
-  useEffect(() => {
-    setCycleFilter(urlFilters.cycle ?? '')
-    setDepartmentFilter(urlFilters.department ?? '')
-  }, [urlFilters.cycle, urlFilters.department])
-
-  const cycles = useMemo(() => uniqueFieldValues(records, 'cycle_name'), [records])
-  const departments = useMemo(() => uniqueFieldValues(records, 'department'), [records])
-
-  const people = useMemo(() => {
-    let filteredRecords = records
-    if (cycleFilter) filteredRecords = filteredRecords.filter((r) => r.cycle_name === cycleFilter)
-    if (departmentFilter) {
-      filteredRecords = filteredRecords.filter((r) => r.department === departmentFilter)
-    }
-    return dedupeEmployees(filteredRecords)
-  }, [records, cycleFilter, departmentFilter])
+  const departments = useMemo(() => uniqueValues(employees.map((e) => e.department)), [employees])
+  const statuses = useMemo(() => uniqueValues(employees.map((e) => e.status)), [employees])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return people.filter((p) => {
-      if (!q) return true
-      const hay = [p.employeeName, p.department, p.lineManagerName, p.latestCycle]
+    const query = search.trim().toLowerCase()
+    return employees.filter((employee) => {
+      if (departmentFilter && employee.department !== departmentFilter) return false
+      if (statusFilter && employee.status !== statusFilter) return false
+      if (!query) return true
+      const haystack = [
+        employee.name,
+        employee.email,
+        employee.department,
+        employee.team,
+        employee.lineManagerName,
+        employee.status,
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-      return hay.includes(q)
+      return haystack.includes(query)
     })
-  }, [people, search])
+  }, [employees, search, departmentFilter, statusFilter])
 
   if (loading) return <LoadingState />
   if (error) return <div className="pd-alert">{error}</div>
-  if (records.length === 0) {
+  if (employees.length === 0) {
     return (
       <EmptyState
-        title="No people data"
-        description="Refresh performance data from the Revolut API (npm run dev with REVOLUT_* in .env)."
+        title="No employee directory"
+        description="Fetch the full Revolut People directory (requires REVOLUT_EMAIL and REVOLUT_TOKEN in .env)."
         onRefresh={reload}
       />
     )
   }
+
+  const syncedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString() : 'Unknown'
 
   return (
     <div className="pd-page">
@@ -64,16 +62,14 @@ export default function PeoplePage() {
         <div>
           <h1 className="pd-page-title">People</h1>
           <p className="pd-page-subtitle">
-            {filtered.length} unique employees
-            {departmentFilter ? ` in ${departmentFilter}` : ''}
-            {cycleFilter ? ` · cycle ${cycleFilter}` : ''}
+            {filtered.length} of {count} employees from Revolut
+            {source ? ` · ${source}` : ''}
+            {fetchedAt ? ` · synced ${syncedLabel}` : ''}
           </p>
         </div>
-        {departmentFilter ? (
-          <Link to={routes.organization.departments} className="pd-btn-secondary pd-btn">
-            ← Departments
-          </Link>
-        ) : null}
+        <button type="button" className="pd-btn-secondary pd-btn" onClick={reload}>
+          Refresh from Revolut
+        </button>
       </header>
 
       <div className="pd-filter-bar">
@@ -84,28 +80,10 @@ export default function PeoplePage() {
           <input
             id="people-search"
             className="pd-input"
-            placeholder="Name, department, line manager…"
+            placeholder="Name, email, department, manager…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-        </div>
-        <div className="pd-form-row">
-          <label className="pd-label" htmlFor="people-cycle">
-            Cycle
-          </label>
-          <select
-            id="people-cycle"
-            className="pd-select"
-            value={cycleFilter}
-            onChange={(e) => setCycleFilter(e.target.value)}
-          >
-            <option value="">All cycles</option>
-            {cycles.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
         </div>
         <div className="pd-form-row">
           <label className="pd-label" htmlFor="people-dept">
@@ -118,9 +96,27 @@ export default function PeoplePage() {
             onChange={(e) => setDepartmentFilter(e.target.value)}
           >
             <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            {departments.map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="pd-form-row">
+          <label className="pd-label" htmlFor="people-status">
+            Status
+          </label>
+          <select
+            id="people-status"
+            className="pd-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
               </option>
             ))}
           </select>
@@ -132,35 +128,37 @@ export default function PeoplePage() {
           <thead>
             <tr>
               <th>Employee</th>
+              <th>Email</th>
               <th>Department</th>
+              <th>Team</th>
               <th>Line manager</th>
-              <th>Cycles</th>
-              <th>Latest cycle</th>
+              <th>Status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', color: '#6b7280' }}>
-                  No people match filters.
+                <td colSpan={7} style={{ textAlign: 'center', color: '#6b7280' }}>
+                  No employees match filters.
                 </td>
               </tr>
             ) : (
-              filtered.slice(0, 500).map((p) => (
-                <tr key={p.employeeId}>
+              filtered.map((employee) => (
+                <tr key={employee.id}>
                   <td>
-                    <Link to={routes.organization.person(p.employeeId)} className="pd-link">
-                      {p.employeeName}
+                    <Link to={routes.organization.person(employee.id)} className="pd-link">
+                      {employee.name}
                     </Link>
                   </td>
-                  <td>{p.department || '—'}</td>
-                  <td>{p.lineManagerName || '—'}</td>
-                  <td>{p.cyclesCount}</td>
-                  <td>{p.latestCycle || '—'}</td>
+                  <td>{employee.email || '—'}</td>
+                  <td>{employee.department || '—'}</td>
+                  <td>{employee.team || '—'}</td>
+                  <td>{employee.lineManagerName || '—'}</td>
+                  <td>{employee.status || '—'}</td>
                   <td className="pd-table-actions">
                     <Link
-                      to={routes.organization.person(p.employeeId)}
+                      to={routes.organization.person(employee.id)}
                       className="pd-btn-secondary pd-btn pd-btn--sm"
                     >
                       View

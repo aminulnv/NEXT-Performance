@@ -42,6 +42,7 @@ export async function loadPerformanceCacheFromSupabase() {
     recordCount: data.record_count ?? decrypted.records.length,
     records: decrypted.records,
     employeesByEmail: decrypted.employeesByEmail ?? null,
+    employeesDirectory: decrypted.employeesDirectory ?? null,
     cacheStatus: 'supabase',
   }
 }
@@ -54,6 +55,7 @@ export async function savePerformanceCacheToSupabase(cache) {
     recordCount: cache.recordCount,
     records: cache.records,
     employeesByEmail: cache.employeesByEmail ?? null,
+    employeesDirectory: cache.employeesDirectory ?? null,
   })
 
   const supabase = getSupabaseAdmin()
