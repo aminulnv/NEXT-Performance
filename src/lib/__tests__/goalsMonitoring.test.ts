@@ -6,6 +6,7 @@ import {
   buildGoalsMonitoringSummary,
   buildGradeComparison,
   buildManagersPendingApproval,
+  uniqueReviewCycles,
 } from '@/lib/goalsMonitoring'
 import type { GoalRecord } from '@/types/goals'
 import type { PerformanceRecord } from '@/types/performance'
@@ -104,6 +105,34 @@ describe('buildCheckInCompletionSummary', () => {
 
     expect(summary.pastDay15).toBe(true)
     expect(summary.overdueAfterDay15).toHaveLength(1)
+  })
+})
+
+describe('goalReviewCycle', () => {
+  it('does not throw when fields is missing', () => {
+    const goals: GoalRecord[] = [
+      {
+        id: 'minimal',
+        employee_id: '1',
+        employee_name: null,
+        owner: null,
+        owner_full_name: null,
+        cycle_name: null,
+        review_cycle: 'Q2 2026',
+        title: 'Test',
+        status: null,
+        progress: null,
+        goal_id: 'g1',
+        approval_status: null,
+        organisation_unit: 'Employee Kpi',
+        organisation_name: null,
+        current_value: null,
+        initial_value: null,
+        fields: undefined as unknown as Record<string, string>,
+      },
+    ]
+    expect(() => buildGoalsMonitoringSummary(goals)).not.toThrow()
+    expect(() => uniqueReviewCycles(goals)).not.toThrow()
   })
 })
 

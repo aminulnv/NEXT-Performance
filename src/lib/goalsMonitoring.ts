@@ -165,8 +165,10 @@ export type RatingMonitoringSummary = {
 }
 
 function field(goal: GoalRecord, ...keys: string[]): string | null {
+  const fields = goal.fields
+  if (!fields || typeof fields !== 'object') return null
   for (const key of keys) {
-    const v = goal.fields[key]
+    const v = fields[key]
     if (v != null && String(v).trim() !== '') return String(v).trim()
   }
   return null

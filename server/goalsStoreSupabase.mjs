@@ -1,9 +1,40 @@
 import { getSupabaseAdmin } from './supabaseAdmin.mjs'
 
+/** Ensure JSON from Supabase always has `fields` (older rows / bad test data may omit it). */
+function normalizeGoalRecord(raw, index) {
+  if (!raw || typeof raw !== 'object') return null
+  const fields =
+    raw.fields && typeof raw.fields === 'object' && !Array.isArray(raw.fields)
+      ? raw.fields
+      : {}
+  return {
+    id: raw.id ?? `goal-${index}`,
+    employee_id: raw.employee_id ?? null,
+    employee_name: raw.employee_name ?? null,
+    owner: raw.owner ?? null,
+    owner_full_name: raw.owner_full_name ?? null,
+    cycle_name: raw.cycle_name ?? null,
+    review_cycle: raw.review_cycle ?? null,
+    title: raw.title ?? null,
+    status: raw.status ?? null,
+    progress: raw.progress ?? null,
+    goal_id: raw.goal_id ?? null,
+    approval_status: raw.approval_status ?? null,
+    organisation_unit: raw.organisation_unit ?? null,
+    organisation_name: raw.organisation_name ?? null,
+    current_value: raw.current_value ?? null,
+    initial_value: raw.initial_value ?? null,
+    fields,
+  }
+}
+
 function rowToDataset(row) {
   if (!row || !Array.isArray(row.goals)) return null
+  const goals = row.goals
+    .map((g, i) => normalizeGoalRecord(g, i))
+    .filter(Boolean)
   return {
-    goals: row.goals,
+    goals,
     columns: row.columns ?? [],
     columnMap: row.column_map ?? {},
     importedAt: row.imported_at ?? null,

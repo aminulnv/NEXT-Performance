@@ -276,7 +276,7 @@ export default function GoalsPage() {
                   </td>
                   <td>{g.progress ?? '—'}</td>
                   {extraColumns.map((col) => (
-                    <td key={col}>{g.fields[col] || '—'}</td>
+                    <td key={col}>{g.fields?.[col] || '—'}</td>
                   ))}
                 </tr>
                 ))
