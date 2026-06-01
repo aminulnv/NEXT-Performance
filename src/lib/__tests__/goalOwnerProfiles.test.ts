@@ -70,6 +70,8 @@ describe('employeeToFlagPersonRow', () => {
             title: 'G',
             owner: 'alice@co.com',
             ownerFullName: 'Alice',
+            employeeId: null,
+            employeeName: null,
             reviewCycle: null,
             organisationUnit: 'Employee Kpi',
             organisationName: 'Product',

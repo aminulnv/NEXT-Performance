@@ -7,11 +7,9 @@ import {
   buildGradeComparison,
   buildManagerComplianceMetrics,
   buildManagersPendingApproval,
-  buildSubmissionBreakdown,
   buildSubmissionBreakdownByKey,
   uniqueReviewCycles,
 } from '@/lib/goalsMonitoring'
-import { buildGoalOwnerProfileLookup } from '@/lib/goalOwnerProfiles'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { GoalRecord } from '@/types/goals'
 import type { PerformanceRecord } from '@/types/performance'
