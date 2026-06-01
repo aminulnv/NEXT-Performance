@@ -28,7 +28,7 @@ Because there is no Goals API, push fresh exports via **`POST /api/goals`** with
 
 Open **Analytics → Monitoring** for the six indicators from your HoD deck:
 
-- Goal submission rate (individual employee goals; Day 15 / 30 flags from calendar quarter dropdown)
+- Goal submission rate — denominator is **active employees** from Organization → People (Revolut directory), not only people in the goals CSV; from **Q2 2026** onward, only employees who joined on or before the quarter start date are counted (e.g. joined by 1 Apr for Q2); **future calendar quarters** show a “not started yet” message instead of goal metrics; Day 10 / 15 / 30 flags from calendar quarter dropdown
 - Goal approval rate (pending vs approved)
 - Progress update rate (current value / progress movement)
 - Check-in completion — prior-quarter employee goals must be **Complete** in the export by **Day 15** of the selected quarter (e.g. Q1 goals due by Day 15 of Q2)

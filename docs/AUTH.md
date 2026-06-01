@@ -14,8 +14,7 @@
 3. **Credentials → Create OAuth client ID → Web application**
 4. **Authorized redirect URIs** (add every host users open in the browser):
    - `http://localhost:5173/api/auth/google/callback` (local dev)
-   - `https://next-performance.onrender.com/api/auth/google/callback`
-   - `https://next-performance-beta.vercel.app/api/auth/google/callback`
+   - `https://your-project.vercel.app/api/auth/google/callback` (production)
 5. Copy **Client ID** and **Client secret**.
 
 ## 2. Environment variables

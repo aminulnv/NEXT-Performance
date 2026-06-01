@@ -6,13 +6,20 @@ function isLocalhostUrl(url) {
   return /localhost|127\.0\.0\.1/i.test(url ?? '')
 }
 
-/** Render sets this automatically on web services. */
-function renderPublicUrl() {
-  const url = process.env.RENDER_EXTERNAL_URL?.trim().replace(/\/$/, '')
-  return url && !isLocalhostUrl(url) ? url : null
+/** Vercel sets VERCEL_URL (hostname only) on each deployment. */
+function vercelPublicUrl() {
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim().replace(/\/$/, '')
+  if (production && !isLocalhostUrl(production)) {
+    return production.startsWith('http') ? production : `https://${production}`
+  }
+  const host = process.env.VERCEL_URL?.trim().replace(/\/$/, '')
+  if (host && !isLocalhostUrl(host)) {
+    return host.startsWith('http') ? host : `https://${host}`
+  }
+  return null
 }
 
-/** Public site URL — from request Host (Vercel/Render), APP_URL, or RENDER_EXTERNAL_URL. */
+/** Public site URL — from APP_URL, request Host (Vercel), or VERCEL_URL. */
 export function getAppUrl(req) {
   const explicit = process.env.APP_URL?.trim().replace(/\/$/, '')
   if (explicit && !isLocalhostUrl(explicit)) {
@@ -27,8 +34,8 @@ export function getAppUrl(req) {
       return `${proto}://${host}`.replace(/\/$/, '')
     }
   }
-  const onRender = renderPublicUrl()
-  if (onRender) return onRender
+  const onVercel = vercelPublicUrl()
+  if (onVercel) return onVercel
   return (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
 }
 
@@ -36,8 +43,8 @@ export function getAppUrl(req) {
 export function getDefaultAppOrigin() {
   const explicit = process.env.APP_URL?.trim().replace(/\/$/, '')
   if (explicit && !isLocalhostUrl(explicit)) return explicit
-  const onRender = renderPublicUrl()
-  if (onRender) return onRender
+  const onVercel = vercelPublicUrl()
+  if (onVercel) return onVercel
   return 'http://localhost:5173'
 }
 
@@ -54,14 +61,14 @@ function redirectToApp(res, path, req) {
 export function validateAppUrlForProduction() {
   if (process.env.NODE_ENV !== 'production') return
   const url = process.env.APP_URL?.trim()
-  const renderUrl = renderPublicUrl()
+  const vercelUrl = vercelPublicUrl()
   if (url && isLocalhostUrl(url)) {
     console.warn(
-      `[auth] APP_URL is localhost (${url}) — ignored; using request Host or RENDER_EXTERNAL_URL (${renderUrl ?? 'none'}).`,
+      `[auth] APP_URL is localhost (${url}) — ignored; using request Host or VERCEL_URL (${vercelUrl ?? 'none'}).`,
     )
   } else if (!url) {
     console.log(
-      `[auth] APP_URL not set — OAuth redirects use request Host or RENDER_EXTERNAL_URL (${renderUrl ?? 'none'}).`,
+      `[auth] APP_URL not set — OAuth redirects use request Host or VERCEL_URL (${vercelUrl ?? 'none'}).`,
     )
   }
 }
@@ -189,14 +196,8 @@ export function registerAuthRoutes(app) {
   })
 
   app.post('/api/auth/logout', (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        console.error(err)
-        return res.status(500).json({ error: 'Logout failed' })
-      }
-      res.clearCookie('pd.sid')
-      res.json({ ok: true })
-    })
+    req.session = null
+    res.json({ ok: true })
   })
 }
 

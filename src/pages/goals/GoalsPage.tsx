@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useGoalsData } from '@/hooks/useGoalsData'
 import { GoalsCsvUpload } from '@/components/goals/GoalsCsvUpload'
 import { LoadingState } from '@/components/performance/LoadingState'
@@ -7,6 +7,11 @@ import { EmptyState } from '@/components/performance/EmptyState'
 import { formatGoalStatusLabel, GoalStatusChip } from '@/components/goals/GoalStatusChip'
 import { goalReviewCycle } from '@/lib/goalsMonitoring'
 import type { GoalRecord } from '@/types/goals'
+import {
+  clearEmployeeGoalsParams,
+  employeeGoalsUrl,
+  readGoalsFilters,
+} from '@/lib/goalsFilters'
 import { routes } from '@/lib/routes'
 import '@/styles/performance.css'
 
@@ -24,7 +29,17 @@ function uniqueGoalField(
 
 export default function GoalsPage() {
   const { goals, dataset, loading, uploading, error, uploadCsv, reload } = useGoalsData()
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const {
+    employee: employeeFilter,
+    owner: ownerFilter,
+    search: searchFromUrl,
+  } = readGoalsFilters(searchParams)
+  const [search, setSearch] = useState(searchFromUrl ?? '')
+
+  useEffect(() => {
+    setSearch(searchFromUrl ?? '')
+  }, [searchFromUrl])
   const [cycleFilter, setCycleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [approvalFilter, setApprovalFilter] = useState('')
@@ -36,13 +51,32 @@ export default function GoalsPage() {
   const approvalStatuses = useMemo(() => uniqueGoalField(goals, (g) => g.approval_status), [goals])
   const orgUnits = useMemo(() => uniqueGoalField(goals, (g) => g.organisation_unit), [goals])
 
+  const employeeFilterLabel = useMemo(() => {
+    if (!employeeFilter && !ownerFilter) return null
+    const match = goals.find((g) => {
+      if (employeeFilter && g.employee_id === employeeFilter) return true
+      if (ownerFilter && g.owner?.trim().toLowerCase() === ownerFilter.toLowerCase()) return true
+      return false
+    })
+    return match?.employee_name ?? match?.owner_full_name ?? match?.owner ?? employeeFilter ?? ownerFilter
+  }, [goals, employeeFilter, ownerFilter])
+
   const hasActiveFilters = Boolean(
-    search.trim() || cycleFilter || statusFilter || approvalFilter || orgUnitFilter,
+    search.trim() ||
+      cycleFilter ||
+      statusFilter ||
+      approvalFilter ||
+      orgUnitFilter ||
+      employeeFilter ||
+      ownerFilter,
   )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+    const ownerKey = ownerFilter?.toLowerCase()
     return goals.filter((g) => {
+      if (employeeFilter && g.employee_id !== employeeFilter) return false
+      if (ownerKey && g.owner?.trim().toLowerCase() !== ownerKey) return false
       if (cycleFilter && goalReviewCycle(g) !== cycleFilter) return false
       if (statusFilter && (g.status ?? '').toLowerCase() !== statusFilter.toLowerCase()) return false
       if (
@@ -71,7 +105,7 @@ export default function GoalsPage() {
         .toLowerCase()
       return haystack.includes(q)
     })
-  }, [goals, search, cycleFilter, statusFilter, approvalFilter, orgUnitFilter])
+  }, [goals, search, cycleFilter, statusFilter, approvalFilter, orgUnitFilter, employeeFilter, ownerFilter])
 
   const clearFilters = () => {
     setSearch('')
@@ -79,6 +113,9 @@ export default function GoalsPage() {
     setStatusFilter('')
     setApprovalFilter('')
     setOrgUnitFilter('')
+    if (employeeFilter || ownerFilter) {
+      setSearchParams(clearEmployeeGoalsParams(searchParams), { replace: true })
+    }
   }
 
   const extraColumns = useMemo(() => {
@@ -123,6 +160,15 @@ export default function GoalsPage() {
 
       {error && <div className="pd-alert">{error}</div>}
       {uploadMessage && <p className="pd-page-subtitle">{uploadMessage}</p>}
+      {employeeFilterLabel && (
+        <p className="pd-page-subtitle" style={{ marginTop: 0 }}>
+          Showing goals for <strong>{employeeFilterLabel}</strong>
+          {' · '}
+          <Link to={routes.goals.root} className="pd-link">
+            Show all goals
+          </Link>
+        </p>
+      )}
       {dataset?.hint && goals.length === 0 && (
         <p className="pd-page-subtitle">{dataset.hint}</p>
       )}
@@ -234,9 +280,9 @@ export default function GoalsPage() {
           <table className="pd-table">
             <thead>
               <tr>
+                <th>Goal</th>
                 <th>Employee</th>
                 <th>Cycle</th>
-                <th>Goal</th>
                 <th>Status</th>
                 <th>Progress</th>
                 {extraColumns.map((col) => (
@@ -257,20 +303,25 @@ export default function GoalsPage() {
               ) : (
                 filtered.map((g) => (
                 <tr key={g.id}>
+                  <td>{g.title ?? '—'}</td>
                   <td>
-                    {g.employee_id ? (
+                    {g.employee_id || g.owner ? (
                       <Link
-                        to={routes.organization.person(g.employee_id)}
+                        to={
+                          employeeGoalsUrl({
+                            employeeId: g.employee_id,
+                            owner: g.employee_id ? null : g.owner,
+                          }) ?? routes.goals.root
+                        }
                         className="pd-link"
                       >
-                        {g.employee_name ?? g.employee_id}
+                        {g.employee_name ?? g.owner_full_name ?? g.owner ?? g.employee_id}
                       </Link>
                     ) : (
                       (g.employee_name ?? '—')
                     )}
                   </td>
                   <td>{goalReviewCycle(g) ?? '—'}</td>
-                  <td>{g.title ?? '—'}</td>
                   <td>
                     <GoalStatusChip status={g.status} />
                   </td>

@@ -47,7 +47,9 @@ Open **http://localhost:5173**. The first load calls Revolut (employees, final g
 
 | Piece | Role |
 |--------|------|
-| `server/index.mjs` | Express API — login + fetch + flatten |
+| `server/app.mjs` | Express API — login + fetch + flatten |
+| `server/index.mjs` | Local dev server entry |
+| `api/index.mjs` | Vercel serverless entry (same Express app) |
 | `server/flatten.mjs` | Super-table flatten (employees, grades, timeline, scorecards) |
 | Vite proxy `/api` → `localhost:3001` | Keeps `REVOLUT_*` secrets off the frontend |
 
@@ -70,10 +72,9 @@ See [`docs/AUTH.md`](docs/AUTH.md). Set `VITE_BYPASS_AUTH=false`, configure Goog
 
 ## Hosting
 
-| Platform | Guide |
-|----------|--------|
-| **Vercel** (UI) + Render/Railway (API) | [`docs/DEPLOY_VERCEL.md`](docs/DEPLOY_VERCEL.md) |
-| **Render** (full stack, recommended) | `npm run build && npm start` — see [`docs/SUPABASE_GO_LIVE.md`](docs/SUPABASE_GO_LIVE.md) §6 |
+Production: **Vercel** (UI + API) + **Supabase** (data). See [`docs/DEPLOY_VERCEL.md`](docs/DEPLOY_VERCEL.md) and [`docs/SUPABASE_GO_LIVE.md`](docs/SUPABASE_GO_LIVE.md).
+
+Local full-stack (optional): `npm run build:node && npm start`
 
 ## Supabase (go-live)
 

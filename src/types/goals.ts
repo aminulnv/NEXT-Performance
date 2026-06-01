@@ -15,6 +15,8 @@ export type GoalRecord = {
   organisation_name: string | null
   current_value: string | null
   initial_value: string | null
+  submitted_at: string | null
+  approved_at: string | null
   fields: Record<string, string>
 }
 
@@ -33,6 +35,8 @@ export type GoalsColumnMap = {
   organisationName: string | null
   currentValue: string | null
   initialValue: string | null
+  submittedAt: string | null
+  approvedAt: string | null
 }
 
 export type GoalsDataset = {

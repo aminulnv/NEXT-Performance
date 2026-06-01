@@ -1,6 +1,7 @@
 import { loadRevolutPerformanceDataset } from './revolutData.mjs'
 import { flattenGrades } from './flatten.mjs'
 import { writeDiskCache } from './diskCache.mjs'
+import { isServerless } from './runtime.mjs'
 import { buildEmployeesByEmailFromList } from './employeeLookup.mjs'
 import { normalizeEmployeesList } from './employeeDirectory.mjs'
 import { savePerformanceCacheToSupabase } from './performanceStoreSupabase.mjs'
@@ -76,6 +77,10 @@ export async function saveCache(data) {
   const savedToSupabase = await savePerformanceCacheToSupabase(data)
   if (savedToSupabase) {
     console.log(`[cache] Encrypted snapshot saved to Supabase (${data.recordCount} records)`)
+  } else if (isServerless()) {
+    throw new Error(
+      'Supabase performance cache is not configured. Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and PERFORMANCE_DATA_ENCRYPTION_KEY on Vercel.',
+    )
   }
   const syncedEmployees = await syncEmployeesToSupabase(data.employeesDirectory, data.fetchedAt).catch(
     (err) => {

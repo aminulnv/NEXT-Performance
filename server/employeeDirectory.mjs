@@ -4,6 +4,19 @@ function trim(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function optionalString(value) {
+  if (value == null || value === '') return null
+  const text = String(value).trim()
+  return text || null
+}
+
+function nestedValue(value, subKey = 'name') {
+  if (value == null || value === '') return null
+  if (typeof value === 'string') return trim(value) || null
+  if (typeof value === 'object') return trim(value[subKey]) || null
+  return optionalString(value)
+}
+
 function employeeFullName(employee) {
   if (!employee || typeof employee !== 'object') return ''
   if (trim(employee.full_name)) return trim(employee.full_name)
@@ -67,17 +80,34 @@ export function normalizeEmployeeForDirectory(employee) {
   if (!id) return null
 
   const lineManager = lineManagerFromProfile(employee)
+  const fullName = optionalString(employee.full_name ?? employee.fullName)
+
   return {
     id,
     remoteId: employee.remote_id != null ? String(employee.remote_id) : null,
     name: employeeFullName(employee) || id,
+    fullName,
+    firstName: optionalString(employee.first_name),
+    middleName: optionalString(employee.middle_name),
+    lastName: optionalString(employee.last_name),
     email: employeeEmail(employee) || null,
+    avatar: optionalString(employee.avatar),
     department: employeeDepartment(employee) || null,
     team: employeeTeam(employee) || null,
+    location: nestedValue(employee.location),
+    entity: nestedValue(employee.entity),
+    joiningDateTime: optionalString(employee.joining_date_time),
+    terminationDateTime: optionalString(employee.termination_date_time),
+    updatedDateTime: optionalString(employee.updated_date_time),
     status: employeeStatus(employee) || null,
+    inactivityReason: optionalString(employee.inactivity_reason),
+    specialisation: nestedValue(employee.specialisation),
+    seniority: nestedValue(employee.seniority),
+    candidateId: employee.candidate_id != null ? String(employee.candidate_id) : null,
     lineManagerId: lineManager.id || null,
     lineManagerName: lineManager.name || null,
     lineManagerEmail: lineManager.email || null,
+    profile: employee,
   }
 }
 

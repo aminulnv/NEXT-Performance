@@ -4,9 +4,24 @@
   "installCommand": "npm install",
   "buildCommand": "node scripts/prepare-vercel.mjs && npm run build:app",
   "outputDirectory": "dist",
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/warm-cache",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

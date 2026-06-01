@@ -30,6 +30,20 @@ const COLUMN_ALIASES = {
   organisationName: ['organisation name', 'organization name', 'org name'],
   currentValue: ['current value', 'current'],
   initialValue: ['initial value', 'initial'],
+  submittedAt: [
+    'submitted date',
+    'submission date',
+    'submitted at',
+    'goal submitted date',
+    'date submitted',
+  ],
+  approvedAt: [
+    'approval date',
+    'approved date',
+    'approved at',
+    'date approved',
+    'last approved date',
+  ],
 }
 
 function normalizeHeader(header) {
@@ -100,6 +114,8 @@ export function parseGoalsCsv(csvText) {
     organisationName: pickColumn(headers, COLUMN_ALIASES.organisationName),
     currentValue: pickColumn(headers, COLUMN_ALIASES.currentValue),
     initialValue: pickColumn(headers, COLUMN_ALIASES.initialValue),
+    submittedAt: pickColumn(headers, COLUMN_ALIASES.submittedAt),
+    approvedAt: pickColumn(headers, COLUMN_ALIASES.approvedAt),
   }
 
   const str = (value) => {
@@ -138,6 +154,8 @@ export function parseGoalsCsv(csvText) {
     )
     const current_value = str(columnMap.currentValue ? raw[columnMap.currentValue] : null)
     const initial_value = str(columnMap.initialValue ? raw[columnMap.initialValue] : null)
+    const submitted_at = str(columnMap.submittedAt ? raw[columnMap.submittedAt] : null)
+    const approved_at = str(columnMap.approvedAt ? raw[columnMap.approvedAt] : null)
 
     return {
       id: rowId({ employee_id, employee_name, cycle_name, title, status }, index),
@@ -156,6 +174,8 @@ export function parseGoalsCsv(csvText) {
       organisation_name,
       current_value,
       initial_value,
+      submitted_at,
+      approved_at,
       fields,
     }
   })

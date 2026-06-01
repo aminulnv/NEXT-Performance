@@ -2,7 +2,9 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { usePerformanceData } from '@/hooks/usePerformanceData'
+import { filterActiveEmployees, filterRecordsByActiveEmployees } from '@/lib/activeEmployees'
 import { StatCard } from '@/components/performance/StatCard'
 import { GradeDistribution } from '@/components/performance/GradeDistribution'
 import { EmptyState } from '@/components/performance/EmptyState'
@@ -13,26 +15,50 @@ import '@/styles/performance.css'
 
 export default function HomePage() {
   const { canManageUsers } = useAuth()
-  const { records, summary, loading, error, warning, reload } = usePerformanceData()
-  const dashboardSummary = useMemo(
-    () => (records.length > 0 ? buildDashboardSummary(records) : null),
-    [records],
+  const { records, loading, error, warning, reload } = usePerformanceData()
+  const {
+    employees: directoryEmployees,
+    loading: employeesLoading,
+    error: employeesError,
+    reload: reloadEmployees,
+  } = useEmployeesDirectory()
+
+  const activeRoster = useMemo(
+    () => filterActiveEmployees(directoryEmployees),
+    [directoryEmployees],
   )
 
-  if (loading) return <LoadingState />
+  const activeRecords = useMemo(
+    () => filterRecordsByActiveEmployees(records, directoryEmployees),
+    [records, directoryEmployees],
+  )
 
-  if (error) {
+  const dashboardSummary = useMemo(
+    () => (activeRecords.length > 0 ? buildDashboardSummary(activeRecords) : null),
+    [activeRecords],
+  )
+
+  if (loading || employeesLoading) return <LoadingState />
+
+  if (error || employeesError) {
     return (
       <div className="pd-page">
-        <div className="pd-alert">{error}</div>
-        <button type="button" className="pd-btn" onClick={reload}>
+        <div className="pd-alert">{error ?? employeesError}</div>
+        <button
+          type="button"
+          className="pd-btn"
+          onClick={() => {
+            reload()
+            reloadEmployees()
+          }}
+        >
           Retry
         </button>
       </div>
     )
   }
 
-  if (!summary || records.length === 0) {
+  if (records.length === 0) {
     return (
       <div className="pd-page">
         <EmptyState
@@ -44,7 +70,37 @@ export default function HomePage() {
     )
   }
 
-  const displaySummary = dashboardSummary ?? summary
+  if (activeRoster.length === 0) {
+    return (
+      <div className="pd-page">
+        <EmptyState
+          title="No active employees in directory"
+          description="Sync the employee directory from Organization → People so Home uses active employees only."
+          onRefresh={() => {
+            reload()
+            reloadEmployees()
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (!dashboardSummary) {
+    return (
+      <div className="pd-page">
+        <EmptyState
+          title="No performance data for active employees"
+          description={`${activeRoster.length} active employees in People, but none match performance records yet.`}
+          onRefresh={() => {
+            reload()
+            reloadEmployees()
+          }}
+        />
+      </div>
+    )
+  }
+
+  const displaySummary = dashboardSummary
   const recordsWithoutScorecard =
     displaySummary.totalRecords - displaySummary.recordsWithScorecard
 
@@ -54,11 +110,18 @@ export default function HomePage() {
         <div>
           <h1 className="pd-page-title">Home</h1>
           <p className="pd-page-subtitle">
-            {displaySummary.recordsWithScorecard} scorecards · {displaySummary.totalRecords} final grades
-            · {displaySummary.cycles.length} review cycles
+            Active employees only · {displaySummary.recordsWithScorecard} scorecards ·{' '}
+            {displaySummary.totalRecords} final grades · {displaySummary.cycles.length} review cycles
           </p>
         </div>
-        <button type="button" className="pd-btn-secondary pd-btn" onClick={reload}>
+        <button
+          type="button"
+          className="pd-btn-secondary pd-btn"
+          onClick={() => {
+            reload()
+            reloadEmployees()
+          }}
+        >
           Refresh
         </button>
       </header>
@@ -68,7 +131,11 @@ export default function HomePage() {
       <section>
         <h2 className="pd-section-heading">Summary</h2>
         <div className="pd-stat-grid">
-          <StatCard label="Employees" value={displaySummary.totalEmployees} />
+          <StatCard
+            label="Employees"
+            value={activeRoster.length}
+            hint="status = Active · People directory"
+          />
           <StatCard
             label="Scorecards"
             value={displaySummary.recordsWithScorecard}

@@ -178,39 +178,125 @@
 
 .pd-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
 .pd-stat-card {
   background: #fff;
   border-radius: 12px;
-  padding: 1rem 1.25rem;
+  padding: 1.125rem 1.25rem 1rem;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.pd-stat-card:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  border-color: #d1d5db;
 }
 
 .pd-stat-label {
   margin: 0;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #9ca3af;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+.pd-stat-body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
 }
 
 .pd-stat-value {
-  margin: 0.35rem 0 0;
-  font-size: 1.75rem;
+  margin: 0.45rem 0 0;
+  font-size: 1.875rem;
   font-weight: 700;
   color: #111827;
-  line-height: 1.2;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
+.pd-stat-body .pd-stat-value {
+  margin: 0;
+}
+
+.pd-stat-pct-chip {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #4b5563;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid #e5e7eb;
+}
+
+.pd-stat-progress {
+  height: 3px;
+  background: #f3f4f6;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+.pd-stat-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: #d1d5db;
+  min-width: 2px;
+  transition: width 0.4s ease;
+}
+
+.pd-stat-card--success .pd-stat-progress-fill { background: #10b981; }
+.pd-stat-card--warning .pd-stat-progress-fill { background: #f59e0b; }
+.pd-stat-card--danger .pd-stat-progress-fill { background: #ef4444; }
+.pd-stat-card--info .pd-stat-progress-fill { background: #3b82f6; }
+
 .pd-stat-hint {
-  margin: 0.25rem 0 0;
+  margin: 0.35rem 0 0;
   font-size: 0.75rem;
   color: #9ca3af;
+}
+
+/* accent: success */
+.pd-stat-card--success .pd-stat-pct-chip {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+/* accent: warning */
+.pd-stat-card--warning .pd-stat-pct-chip {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+/* accent: danger */
+.pd-stat-card--danger .pd-stat-pct-chip {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* accent: info */
+.pd-stat-card--info .pd-stat-pct-chip {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
 .pd-metric-term {
@@ -362,6 +448,16 @@
   margin-top: 0.25rem;
 }
 
+.pd-flag-goal-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.8125rem;
+}
+
+.pd-flag-goal-list li + li {
+  margin-top: 0.25rem;
+}
+
 .pd-flag-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -386,12 +482,149 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .pd-flag-panel .pd-panel-title {
   font-size: 0.9375rem;
   line-height: 1.35;
   margin-bottom: 0.75rem;
+}
+
+.pd-flag-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.pd-flag-panel-toolbar .pd-view-toggle {
+  margin-bottom: 0;
+}
+
+.pd-flag-panel-toolbar__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.pd-scroll-list-shell {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pd-scroll-list {
+  width: 100%;
+  max-height: 17.5rem;
+  overflow: visible;
+}
+
+.pd-scroll-list--overflowing {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f3f4f6;
+}
+
+.pd-scroll-list--tall {
+  max-height: min(24rem, 50vh);
+}
+
+.pd-flag-panel .pd-scroll-list-shell {
+  flex: 1 1 auto;
+  min-height: 10rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.pd-flag-panel .pd-scroll-list-shell .pd-scroll-list--overflowing {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pd-flag-panel .pd-scroll-list-shell .pd-scroll-list--fits {
+  flex: 0 1 auto;
+}
+
+.pd-scroll-list .pd-flag-people-table,
+.pd-scroll-list .pd-table {
+  width: 100%;
+  margin: 0;
+  table-layout: fixed;
+}
+
+.pd-scroll-list .pd-flag-people-table.pd-flag-people-table--auto-cols {
+  table-layout: auto;
+}
+
+.pd-scroll-list .pd-flag-people-table thead th,
+.pd-scroll-list .pd-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f9fafb;
+  box-shadow: 0 1px 0 #e5e7eb;
+}
+
+.pd-scroll-list .pd-flag-people-table thead th {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+}
+
+.pd-scroll-list .pd-flag-people-table thead th.pd-flag-people-table__avatar-col {
+  padding-left: 0.75rem;
+  width: 3rem;
+}
+
+.pd-scroll-list .pd-flag-people-table tbody td.pd-flag-people-table__avatar-col {
+  padding-left: 0.75rem;
+}
+
+.pd-scroll-list .pd-flag-people-table tbody td {
+  border-bottom: none;
+}
+
+.pd-scroll-list .pd-flag-people-table tbody tr {
+  box-shadow: 0 1px 0 #f3f4f6;
+}
+
+.pd-scroll-list .pd-table tbody tr {
+  box-shadow: 0 1px 0 #f3f4f6;
+}
+
+.pd-scroll-list .pd-table tbody td {
+  border-bottom: none;
+}
+
+.pd-scroll-list .pd-table thead th {
+  padding: 0.625rem 0.75rem;
+}
+
+.pd-scroll-list .pd-table tbody td {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.pd-scroll-list::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+.pd-scroll-list::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.pd-scroll-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 0.25rem;
+}
+
+.pd-scroll-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 .pd-flag-people-table {
@@ -407,7 +640,7 @@
   text-transform: uppercase;
   color: #9ca3af;
   text-align: left;
-  padding: 0 0 0.5rem;
+  padding: 0 0.75rem 0.5rem 0;
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -422,10 +655,6 @@
   border-bottom: 1px solid #f3f4f6;
 }
 
-.pd-flag-people-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
 .pd-flag-people-table__avatar-col {
   width: 2.5rem;
   padding-right: 0.5rem !important;
@@ -435,16 +664,21 @@
   font-weight: 600;
   color: #111827;
   min-width: 0;
+  line-height: 1.3;
 }
 
-.pd-flag-people-table__dept {
-  font-size: 0.8125rem;
-  text-align: left;
-  max-width: 12rem;
+.pd-flag-people-table__dept-sub {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-top: 0;
+  line-height: 1.2;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
+
 
 .pd-flag-people-table__count {
   font-size: 0.875rem;
@@ -454,6 +688,90 @@
   text-align: right;
   white-space: nowrap;
   width: 1%;
+}
+
+.pd-flag-people-table--auto-cols col.pd-flag-people-table__col-avatar {
+  width: 2.75rem;
+}
+
+.pd-flag-people-table--auto-cols col.pd-flag-people-table__col-name {
+  width: 0;
+}
+
+
+.pd-flag-people-table--auto-cols col.pd-flag-people-table__col-manager {
+  width: 0;
+}
+
+.pd-flag-people-table--auto-cols col.pd-flag-people-table__col-count {
+  width: 0;
+}
+
+.pd-flag-people-table--auto-cols col.pd-flag-people-table__col-goals {
+  width: auto;
+}
+
+.pd-flag-people-table--auto-cols .pd-flag-people-table__name {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Without a goals column, let manager absorb leftover width (same role as the goals column).
+   Keeps avatar + name tight on the left; manager gets the remaining space. */
+.pd-flag-people-table--auto-cols:not(.pd-flag-people-table--with-goals) .pd-flag-people-table__manager {
+  width: 99%;
+  max-width: none;
+}
+
+
+.pd-flag-people-table--auto-cols .pd-flag-people-table__manager {
+  width: 1%;
+  max-width: 12rem;
+  font-size: 0.8125rem;
+}
+
+.pd-flag-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pd-flag-person--muted .pd-flag-person__label {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.pd-flag-person__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #111827;
+}
+
+.pd-flag-people-table__count-col {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  padding-left: 0.5rem !important;
+  padding-right: 0.75rem !important;
+}
+
+.pd-flag-people-table thead th.pd-flag-people-table__count-col {
+  text-align: center;
+}
+
+.pd-flag-people-table--with-goals .pd-flag-people-table__goals-col {
+  width: 99%;
+  min-width: 12rem;
+}
+
+.pd-flag-people-table__goals {
+  font-size: 0.8125rem;
+  color: #374151;
+  vertical-align: top;
 }
 
 .pd-person-avatar-wrap {

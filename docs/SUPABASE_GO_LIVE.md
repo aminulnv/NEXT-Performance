@@ -91,10 +91,9 @@ Supabase Auth + Google is optional later; current flow uses Express sessions.
 
 ## 6. Hosting
 
-| Host | Frontend | API + Supabase |
-|------|----------|----------------|
-| **Render / Railway / Fly / VPS** | `dist/` via Express | Recommended — one app, `npm start` |
-| **Vercel** | Static only | Deploy API elsewhere; point `/api` proxy to API host |
+Production: **Vercel** serves the UI and API; **Supabase** holds all persistent data. See [`DEPLOY_VERCEL.md`](DEPLOY_VERCEL.md).
+
+Local dev: `npm run dev` (Vite + local API). Optional self-hosted: `npm run build:node && npm start`.
 
 Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 

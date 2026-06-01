@@ -71,6 +71,42 @@ export function formatQuarterYear(quarter: CalendarQuarter, year: number): strin
   return `Q${quarter} ${year}`
 }
 
+/** First calendar quarter where joining-date cutoff applies (inclusive). */
+export const JOINING_DATE_CUTOFF_FROM = { year: 2026, quarter: 2 as CalendarQuarter }
+
+/** True from Q2 2026 onward — earlier quarters keep the full active roster. */
+export function isJoiningCutoffActiveForQuarter(
+  year: number,
+  quarter: CalendarQuarter,
+): boolean {
+  if (year > JOINING_DATE_CUTOFF_FROM.year) return true
+  if (year === JOINING_DATE_CUTOFF_FROM.year) {
+    return quarter >= JOINING_DATE_CUTOFF_FROM.quarter
+  }
+  return false
+}
+
+/** Resolve monitoring quarter from calendar filters or a goals cycle label like "Q2 2026". */
+export function resolveMonitoringQuarter(
+  cycleFilter: string | null | undefined,
+  calendarQuarter: CalendarQuarter | null | undefined,
+  calendarYear: number | null | undefined,
+): { quarter: CalendarQuarter; year: number } | null {
+  if (calendarQuarter != null && calendarYear != null) {
+    return { quarter: calendarQuarter, year: calendarYear }
+  }
+  return parseQuarterYearFromCycle(cycleFilter)
+}
+
+/** True once the calendar quarter has begun (local date). */
+export function quarterHasStarted(
+  year: number,
+  quarter: CalendarQuarter,
+  referenceDate = new Date(),
+): boolean {
+  return dayOfQuarter(year, quarter, referenceDate) != null
+}
+
 /** Parses labels like "Q2 2026" from Revolut review cycle. */
 export function parseQuarterYearFromCycle(
   cycle: string | null | undefined,
@@ -83,4 +119,70 @@ export function parseQuarterYearFromCycle(
     quarter: Number(match[1]) as CalendarQuarter,
     year: Number(match[2]),
   }
+}
+
+/** Revolut cycle labels often include a stage suffix after a middle dot. */
+export function normalizeReviewCycleLabel(cycle: string | null | undefined): string {
+  if (!cycle) return ''
+  return cycle.split('·')[0].trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function parseHalfYearFromCycle(
+  cycle: string | null | undefined,
+): { half: 1 | 2; year: number } | null {
+  const text = cycle?.trim()
+  if (!text) return null
+  const match = text.match(/\b(\d{4})\s*H\s*([12])\b/i)
+  if (!match) return null
+  return { year: Number(match[1]), half: Number(match[2]) as 1 | 2 }
+}
+
+function halfYearMatchesQuarter(
+  halfYear: { half: 1 | 2; year: number },
+  quarter: CalendarQuarter,
+  year: number,
+): boolean {
+  if (halfYear.year !== year) return false
+  if (halfYear.half === 1) return quarter === 1 || quarter === 2
+  return quarter === 3 || quarter === 4
+}
+
+/** True when a goals cycle label and a performance review cycle refer to the same cycle. */
+export function reviewCyclesMatch(
+  filter: string | null | undefined,
+  cycle: string | null | undefined,
+): boolean {
+  if (!filter) return true
+  if (!cycle) return false
+
+  const left = filter.trim()
+  const right = cycle.trim()
+  if (!left || !right) return false
+
+  const normLeft = normalizeReviewCycleLabel(left)
+  const normRight = normalizeReviewCycleLabel(right)
+  if (normLeft === normRight) return true
+  if (normLeft.startsWith(normRight) || normRight.startsWith(normLeft)) return true
+
+  const filterQuarter = parseQuarterYearFromCycle(left)
+  const cycleQuarter = parseQuarterYearFromCycle(right)
+  if (filterQuarter && cycleQuarter) {
+    return (
+      filterQuarter.quarter === cycleQuarter.quarter && filterQuarter.year === cycleQuarter.year
+    )
+  }
+
+  const filterHalf = parseHalfYearFromCycle(left)
+  const cycleHalf = parseHalfYearFromCycle(right)
+  if (filterHalf && cycleQuarter) {
+    return halfYearMatchesQuarter(filterHalf, cycleQuarter.quarter, cycleQuarter.year)
+  }
+  if (cycleHalf && filterQuarter) {
+    return halfYearMatchesQuarter(cycleHalf, filterQuarter.quarter, filterQuarter.year)
+  }
+  if (filterHalf && cycleHalf) {
+    return filterHalf.half === cycleHalf.half && filterHalf.year === cycleHalf.year
+  }
+
+  return false
 }

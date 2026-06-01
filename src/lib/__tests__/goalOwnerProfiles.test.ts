@@ -14,8 +14,15 @@ function employee(partial: Partial<EmployeeGoalStatus>): EmployeeGoalStatus {
     owner: 'alice@co.com',
     ownerFullName: 'Alice Smith',
     employeeId: 'emp-1',
+    department: null,
+    location: null,
+    lineManagerKey: '__unknown__',
+    lineManagerName: 'Unknown line manager',
+    lineManagerId: null,
+    lineManagerEmail: null,
     reviewCycle: null,
     employeeGoalCount: 1,
+    submittedGoalCount: 0,
     submitted: false,
     fullyApproved: false,
     hasPendingApproval: false,
@@ -70,12 +77,75 @@ describe('employeeToFlagPersonRow', () => {
             goalStatus: null,
             hasMetrics: false,
             hasProgressUpdate: false,
+            submittedAt: null,
+            approvedAt: null,
           },
         ],
       }),
       buildGoalOwnerProfileLookup([]),
     )
     expect(row.department).toBe('Product')
+  })
+
+  it('includes employee id for person detail navigation', () => {
+    const row = employeeToFlagPersonRow(employee({ employeeId: 'emp-42' }), buildGoalOwnerProfileLookup([]))
+    expect(row.employeeId).toBe('emp-42')
+  })
+
+  it('includes submitted goal count', () => {
+    const row = employeeToFlagPersonRow(
+      employee({ submittedGoalCount: 4, submitted: true }),
+      buildGoalOwnerProfileLookup([]),
+    )
+    expect(row.submittedGoalCount).toBe(4)
+  })
+
+  it('includes line manager name', () => {
+    const row = employeeToFlagPersonRow(
+      employee({ lineManagerName: 'Bob Manager' }),
+      buildGoalOwnerProfileLookup([]),
+    )
+    expect(row.managerName).toBe('Bob Manager')
+  })
+
+  it('resolves manager avatar from performance records', () => {
+    const records: PerformanceRecord[] = [
+      {
+        id: '1',
+        sync_run_id: null,
+        grade_record_id: null,
+        employee_id: 'mgr-1',
+        cycle_id: null,
+        employee_name: 'Bob Manager',
+        cycle_name: null,
+        department: null,
+        team: null,
+        display_grade: null,
+        line_manager_grade: null,
+        calculated_grade: null,
+        absolute_rating: null,
+        ranking_score: null,
+        payload: { 'Employee Avatar URL': 'https://example.com/bob.png' },
+        synced_at: '2026-01-01',
+      },
+    ]
+    const row = employeeToFlagPersonRow(
+      employee({
+        lineManagerName: 'Bob Manager',
+        lineManagerId: 'mgr-1',
+        lineManagerEmail: 'bob@co.com',
+      }),
+      buildGoalOwnerProfileLookup(records),
+    )
+    expect(row.managerAvatarUrl).toBe('https://example.com/bob.png')
+  })
+
+  it('falls back when line manager is unknown', () => {
+    const row = employeeToFlagPersonRow(
+      employee({ lineManagerName: 'Unknown line manager' }),
+      buildGoalOwnerProfileLookup([]),
+    )
+    expect(row.managerName).toBe('—')
   })
 })
 

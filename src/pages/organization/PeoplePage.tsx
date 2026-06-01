@@ -12,6 +12,12 @@ function uniqueValues(values: Array<string | null | undefined>) {
   )
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+}
+
 export default function PeoplePage() {
   const { employees, count, loading, error, fetchedAt, source, reload } = useEmployeesDirectory()
   const [search, setSearch] = useState('')
@@ -33,6 +39,9 @@ export default function PeoplePage() {
         employee.department,
         employee.team,
         employee.lineManagerName,
+        employee.seniority,
+        employee.specialisation,
+        employee.location,
         employee.status,
       ]
         .filter(Boolean)
@@ -132,6 +141,8 @@ export default function PeoplePage() {
               <th>Department</th>
               <th>Team</th>
               <th>Line manager</th>
+              <th>Joining date</th>
+              <th>Seniority</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -139,7 +150,7 @@ export default function PeoplePage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: '#6b7280' }}>
+                <td colSpan={9} style={{ textAlign: 'center', color: '#6b7280' }}>
                   No employees match filters.
                 </td>
               </tr>
@@ -155,6 +166,8 @@ export default function PeoplePage() {
                   <td>{employee.department || '—'}</td>
                   <td>{employee.team || '—'}</td>
                   <td>{employee.lineManagerName || '—'}</td>
+                  <td>{formatDate(employee.joiningDateTime)}</td>
+                  <td>{employee.seniority || '—'}</td>
                   <td>{employee.status || '—'}</td>
                   <td className="pd-table-actions">
                     <Link

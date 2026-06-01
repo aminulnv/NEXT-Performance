@@ -21,3 +21,4 @@ server/data/access.json
 Thumbs.db
 *.log
 *.tsbuildinfo
+.vercel

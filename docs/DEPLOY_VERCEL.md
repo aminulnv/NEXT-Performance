@@ -1,89 +1,112 @@
-# Production hosting (Render + Vercel)
+# Production hosting (Vercel + Supabase)
 
-Use **one primary URL** for your team. Both setups below are supported after the latest deploy.
+Production runs entirely on **Vercel** (UI + API) with **Supabase** for persistent data. No Render or other backend host is required.
 
-| URL | Role |
-|-----|------|
-| **https://next-performance.onrender.com** | **Recommended** — full app (UI + API) |
-| **https://next-performance-beta.vercel.app** | UI on Vercel, `/api` proxied to Render |
+| Component | Platform |
+|-----------|----------|
+| React UI | Vercel static (`dist/`) |
+| Express API | Vercel serverless (`api/index.mjs`) |
+| User access, goals, performance cache, employees | Supabase Postgres |
+
+Primary URL example: **https://next-performance-beta.vercel.app**
 
 ---
 
-## A. Render only (recommended)
+## 1. Supabase (required for production)
 
-Repo includes [`render.yaml`](../render.yaml). Connect the repo on [Render](https://render.com).
+Run migrations and set env vars — see [`SUPABASE_GO_LIVE.md`](SUPABASE_GO_LIVE.md).
 
-### Render environment variables
+On Vercel you **must** configure:
 
-Set in the dashboard (or Blueprint); **do not use localhost**:
+| Variable | Required |
+|----------|----------|
+| `SUPABASE_URL` | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes |
+| `PERFORMANCE_DATA_ENCRYPTION_KEY` | Yes (encrypted Revolut cache) |
+
+Without these, redeploys lose data and cache warming fails (Vercel has no persistent disk).
+
+---
+
+## 2. Vercel project
+
+Connect the repo on [Vercel](https://vercel.com). The repo includes `vercel.json`:
+
+- **Build:** `node scripts/prepare-vercel.mjs && npm run build:app`
+- **Output:** `dist/` (SPA)
+- **API:** `/api/*` → `api/index.mjs` (Express app)
+- **Cron:** `/api/cron/warm-cache` daily at 06:00 UTC
+
+### Vercel environment variables
+
+Set in **Project → Settings → Environment Variables** (Production):
 
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
-| `APP_URL` | `https://next-performance.onrender.com` |
+| `APP_URL` | `https://your-project.vercel.app` (your production URL) |
 | `VITE_BYPASS_AUTH` | `false` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud |
 | `SESSION_SECRET` | 32+ random chars |
+| `CRON_SECRET` | Random string (Vercel sends `Authorization: Bearer …` on cron hits) |
 | `ALLOWED_EMAIL_DOMAIN` | e.g. `nextventures.io` |
+| `AUTH_BOOTSTRAP_ADMINS` | Comma-separated admin emails |
 | `REVOLUT_EMAIL` / `REVOLUT_TOKEN` | Revolut API |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | optional |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase |
+| `PERFORMANCE_DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` |
 
-**Build:** `npm run build` (installs devDependencies for `tsc` + Vite even when `NODE_ENV=production`)  
-**Start:** `npm start`
-
-If the build fails with `tsc: command not found`, `NODE_ENV=production` was set during install — use the build command above (see `render.yaml`).
-
-Share **only** the Render URL with users.
+Redeploy after saving env vars.
 
 ---
 
-## B. Vercel + Render API
+## 3. Google Cloud OAuth
 
-### 1. Render (same service as A)
-
-Keep the API running at `https://next-performance.onrender.com`.
-
-You may **delete** `APP_URL` on Render or set it to either public URL — OAuth now uses the **request Host** (`x-forwarded-host`) so Vercel and Render both work.
-
-### 2. Vercel
-
-**Project → Settings → Environment Variables** (Production):
-
-| Variable | Value |
-|----------|--------|
-| `API_BACKEND_URL` | `https://next-performance.onrender.com` |
-| `VITE_BYPASS_AUTH` | `false` |
-
-Redeploy after saving. The repo includes:
-
-- `api/[...path].js` — proxies `/api/*` to Render (fixes **404** on login)
-- `vercel.json` — SPA routing for React
-
-### 3. Google Cloud OAuth
-
-Add **both** redirect URIs if you use both hosts:
+**Authorized redirect URI:**
 
 ```text
-https://next-performance.onrender.com/api/auth/google/callback
-https://next-performance-beta.vercel.app/api/auth/google/callback
+https://your-project.vercel.app/api/auth/google/callback
 ```
 
 **Authorized JavaScript origins:**
 
 ```text
-https://next-performance.onrender.com
-https://next-performance-beta.vercel.app
+https://your-project.vercel.app
 ```
+
+Add preview URLs too if you want OAuth on Vercel preview deployments.
 
 ---
 
-## Verify
+## 4. First deploy checklist
 
-| Test | Expected |
-|------|----------|
-| `https://next-performance.onrender.com/api/auth/google` | Redirect to Google |
-| `https://next-performance-beta.vercel.app/api/auth/google` | Redirect to Google (not 404) |
-| After Google login | Same host you started from (not `localhost`) |
+1. Run Supabase migrations (see `SUPABASE_GO_LIVE.md`)
+2. Set all Vercel env vars above
+3. Deploy to Vercel
+4. Warm the cache once (Revolut fetch takes several minutes):
+
+   ```bash
+   curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+     https://your-project.vercel.app/api/cron/warm-cache
+   ```
+
+   Or wait for the scheduled cron (every 6 hours).
+
+5. Verify: `GET /api/health` → `"platform": "vercel"`, `"supabase": true`
+
+---
+
+## 5. Local development
+
+Unchanged — API runs as a long-lived Node process:
+
+```bash
+npm run dev          # Vite + local API (port 3001)
+npm run cache:warm   # Optional: warm disk + Supabase cache
+```
+
+Local dev can use disk cache without Supabase; production on Vercel requires Supabase.
+
+Optional: run the production stack locally with `npm run build:node && npm start` (serves `dist/` + API on one port).
 
 ---
 
@@ -91,8 +114,18 @@ https://next-performance-beta.vercel.app
 
 | Problem | Fix |
 |---------|-----|
-| Vercel **404** on `/api/auth/google` | Set `API_BACKEND_URL=https://next-performance.onrender.com`, redeploy Vercel |
-| Redirect to **localhost** after login | On Render → Environment: set `APP_URL=https://next-performance.onrender.com` or **delete** the localhost value. Redeploy. Latest code also ignores localhost `APP_URL` and uses `RENDER_EXTERNAL_URL` / request Host. |
-| Build: `JSX.IntrinsicElements` / `tsc: command not found` | Set Render **Build Command** to `npm run build` (not plain `npm install && npm run build` without dev deps). |
-| `auth_failed` | Check Render logs; `GOOGLE_*`, `SESSION_SECRET` |
-| `no_access` | Add user in Supabase or `access.json` on Render |
+| Vercel **404** on `/api/auth/google` | Redeploy; ensure `vercel.json` rewrites `/api/:path*` → `/api` |
+| Redirect to **localhost** after login | Set `APP_URL=https://your-project.vercel.app` on Vercel (not localhost) |
+| `auth_failed` | Check Vercel function logs; verify `GOOGLE_*`, `SESSION_SECRET` |
+| `no_access` | Add user in Supabase `dashboard_users` or via Admin → Access |
+| Empty performance data | Run cache warm; verify `PERFORMANCE_DATA_ENCRYPTION_KEY` + Supabase migration `00006` |
+| Cron returns 401 | Set `CRON_SECRET` on Vercel; cron sends `Authorization: Bearer <CRON_SECRET>` |
+| Cache warm timeout | Pro plan allows 300s function duration (`maxDuration` in `vercel.json`) |
+
+---
+
+## Architecture notes
+
+- **Sessions:** Encrypted cookies (`cookie-session`) — stateless, works on serverless
+- **No disk writes on Vercel** — performance cache, goals, and access must use Supabase
+- **Background refresh:** Disabled on Vercel; use cron or manual `?refresh=1` (HR/admin)

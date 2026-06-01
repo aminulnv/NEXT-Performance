@@ -1,12 +1,20 @@
 import type { EmployeeGoalStatus } from '@/lib/goalsMonitoring'
+import { reviewCyclesMatch } from '@/lib/calendarQuarters'
+import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { PerformanceRecord } from '@/types/performance'
 
 export type FlagPersonRow = {
   id: string
+  employeeId: string | null
   name: string
   department: string
+  managerName: string
+  managerAvatarUrl: string | null
   avatarUrl: string | null
+  submittedGoalCount?: number
   pendingGoalCount?: number
+  teamSize?: number
+  oldestPendingDays?: number | null
 }
 
 export type LineManagerInfo = {
@@ -29,6 +37,7 @@ export type ManagerPendingApproval = {
 type OwnerProfile = {
   department: string | null
   avatarUrl: string | null
+  location: string | null
 }
 
 export type GoalOwnerProfileLookup = {
@@ -53,6 +62,7 @@ export function buildGoalOwnerProfileLookup(
     const profile: OwnerProfile = {
       department: r.department,
       avatarUrl: payloadStr(r.payload, 'Employee Avatar URL'),
+      location: payloadStr(r.payload, 'Employee Location'),
     }
     if (r.employee_id) {
       const existing = byEmployeeId.get(r.employee_id)
@@ -76,6 +86,76 @@ export function buildGoalOwnerProfileLookup(
   return { byEmployeeId, byEmail }
 }
 
+export function enrichGoalOwnerProfileLookup(
+  lookup: GoalOwnerProfileLookup,
+  directory: EmployeeDirectoryEntry[],
+): GoalOwnerProfileLookup {
+  const byEmployeeId = new Map(lookup.byEmployeeId)
+  const byEmail = new Map(lookup.byEmail)
+
+  const merge = (existing: OwnerProfile | undefined, incoming: OwnerProfile): OwnerProfile => ({
+    department: existing?.department ?? incoming.department,
+    avatarUrl: existing?.avatarUrl ?? incoming.avatarUrl,
+    location: existing?.location ?? incoming.location,
+  })
+
+  for (const employee of directory) {
+    const profile: OwnerProfile = {
+      department: employee.department?.trim() || null,
+      avatarUrl: employee.avatar?.trim() || null,
+      location: employee.location?.trim() || null,
+    }
+    if (employee.id) {
+      byEmployeeId.set(employee.id, merge(byEmployeeId.get(employee.id), profile))
+    }
+    const email = employee.email?.trim().toLowerCase()
+    if (email) {
+      byEmail.set(email, merge(byEmail.get(email), profile))
+    }
+  }
+
+  return { byEmployeeId, byEmail }
+}
+
+export function resolveProfileAvatar(
+  lookup: GoalOwnerProfileLookup,
+  employeeId: string | null | undefined,
+  email: string | null | undefined,
+): string | null {
+  if (employeeId) {
+    const fromId = lookup.byEmployeeId.get(employeeId)
+    if (fromId?.avatarUrl) return fromId.avatarUrl
+  }
+  const emailKey = email?.trim().toLowerCase()
+  if (emailKey) {
+    const fromEmail = lookup.byEmail.get(emailKey)
+    if (fromEmail?.avatarUrl) return fromEmail.avatarUrl
+  }
+  if (employeeId) return lookup.byEmployeeId.get(employeeId)?.avatarUrl ?? null
+  return null
+}
+
+export function normalizeEmployeeLocation(raw: string | null | undefined): string {
+  if (!raw?.trim()) return 'Unknown'
+  const s = raw.trim().toLowerCase()
+  if (s.includes('malaysia') || s === 'my') return 'MY'
+  if (s.includes('sri lanka') || s === 'sl') return 'SL'
+  if (s.includes('cyprus')) return 'Cyprus'
+  if (s.includes('bangladesh') || s === 'bd') return 'BD'
+  return raw.trim()
+}
+
+export function resolveOwnerLocation(
+  employee: EmployeeGoalStatus,
+  lookup: GoalOwnerProfileLookup,
+): string {
+  const emailKey = employee.owner.trim().toLowerCase()
+  const fromPerf =
+    (employee.employeeId ? lookup.byEmployeeId.get(employee.employeeId) : undefined) ??
+    lookup.byEmail.get(emailKey)
+  return normalizeEmployeeLocation(fromPerf?.location)
+}
+
 function departmentFromGoals(employee: EmployeeGoalStatus): string | null {
   for (const g of employee.goals) {
     const name = (g.organisationName ?? '').trim()
@@ -94,15 +174,27 @@ export function employeeToFlagPersonRow(
     lookup.byEmail.get(emailKey)
 
   const department =
+    employee.department?.trim() ||
     fromPerf?.department?.trim() ||
     departmentFromGoals(employee)?.trim() ||
     '—'
 
+  const managerRaw = employee.lineManagerName?.trim()
+  const managerName =
+    managerRaw && managerRaw.toLowerCase() !== 'unknown line manager' ? managerRaw : '—'
+
   return {
     id: employee.owner,
+    employeeId: employee.employeeId,
     name: employee.ownerFullName?.trim() || employee.owner,
     department,
+    managerName,
+    managerAvatarUrl:
+      managerName === '—'
+        ? null
+        : resolveProfileAvatar(lookup, employee.lineManagerId, employee.lineManagerEmail),
     avatarUrl: fromPerf?.avatarUrl ?? null,
+    submittedGoalCount: employee.submittedGoalCount,
   }
 }
 
@@ -132,8 +224,7 @@ function lineManagerFromRecord(record: PerformanceRecord): LineManagerInfo | nul
 
 function recordCycleScore(record: PerformanceRecord, cycleFilter: string | null): number {
   if (!cycleFilter) return 0
-  const cycle = (record.cycle_name ?? '').trim().toLowerCase()
-  return cycle === cycleFilter.trim().toLowerCase() ? 1 : 0
+  return reviewCyclesMatch(cycleFilter, record.cycle_name) ? 1 : 0
 }
 
 export function buildLineManagerLookup(
@@ -178,6 +269,34 @@ export function resolveLineManagerForOwner(
   return null
 }
 
+export function managerTeamToFlagPersonRow(
+  row: {
+    manager: LineManagerInfo
+    teamSize: number
+    pendingApprovalGoalCount: number
+    oldestPendingDays: number | null
+  },
+  lookup: GoalOwnerProfileLookup,
+): FlagPersonRow {
+  const emailKey = row.manager.email
+  const fromPerf =
+    (emailKey ? lookup.byEmail.get(emailKey) : undefined) ??
+    (row.manager.id ? lookup.byEmployeeId.get(row.manager.id) : undefined)
+
+  return {
+    id: row.manager.key,
+    employeeId: row.manager.id,
+    name: row.manager.name,
+    department: fromPerf?.department?.trim() || '—',
+    managerName: '—',
+    managerAvatarUrl: null,
+    avatarUrl: fromPerf?.avatarUrl ?? null,
+    pendingGoalCount: row.pendingApprovalGoalCount,
+    teamSize: row.teamSize,
+    oldestPendingDays: row.oldestPendingDays,
+  }
+}
+
 export function managerPendingToFlagPersonRow(
   row: ManagerPendingApproval,
   lookup: GoalOwnerProfileLookup,
@@ -189,8 +308,11 @@ export function managerPendingToFlagPersonRow(
 
   return {
     id: row.manager.key,
+    employeeId: row.manager.id,
     name: row.manager.name,
     department: fromPerf?.department?.trim() || '—',
+    managerName: '—',
+    managerAvatarUrl: null,
     avatarUrl: fromPerf?.avatarUrl ?? null,
     pendingGoalCount: row.pendingGoalCount,
   }
