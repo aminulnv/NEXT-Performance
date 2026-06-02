@@ -35,6 +35,14 @@ function AnalyticsIndexRedirect() {
   return <Navigate to={target} replace />
 }
 
+function RootIndexRedirect() {
+  const { canAccessPath } = useAuth()
+  if (canAccessPath(routes.analytics.monitoring)) {
+    return <Navigate to={routes.analytics.monitoring} replace />
+  }
+  return <HomePage />
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -42,7 +50,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
 
         <Route path="/" element={<AuthenticatedLayout />}>
-          <Route index element={<HomePage />} />
+          <Route index element={<RootIndexRedirect />} />
 
           <Route path="organization">
             <Route index element={<Navigate to={routes.organization.departments} replace />} />

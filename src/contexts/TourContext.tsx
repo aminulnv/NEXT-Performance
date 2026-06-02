@@ -14,6 +14,7 @@ import {
   isTourDismissed,
   markTourDismissed,
   PLATFORM_TOUR_STEPS,
+  TOUR_AUTO_START_ENABLED,
   type TourStep,
 } from '@/lib/platformTour'
 
@@ -76,7 +77,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (loading || !user) {
+    if (loading || !user || !TOUR_AUTO_START_ENABLED) {
       setActive(false)
       return
     }

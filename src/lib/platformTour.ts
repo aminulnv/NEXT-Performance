@@ -2,6 +2,9 @@ import { routes } from '@/lib/routes'
 
 export const TOUR_DISMISSED_KEY = 'pd-platform-tour-dismissed'
 
+/** When false, the tour stays mounted but does not auto-start for new visitors. */
+export const TOUR_AUTO_START_ENABLED = false
+
 export type TourPlacement = 'center' | 'right' | 'bottom' | 'top'
 
 export type TourStep = {
