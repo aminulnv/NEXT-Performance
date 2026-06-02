@@ -1,6 +1,8 @@
 import crypto from 'crypto'
+import zlib from 'zlib'
 
 const ALGORITHM = 'aes-256-gcm'
+const COMPRESSED_VERSION = 2
 const IV_LENGTH = 12
 const TAG_LENGTH = 16
 const KEY_LENGTH = 32
@@ -41,11 +43,11 @@ export function encryptJson(value) {
   const key = requireKey()
   const iv = crypto.randomBytes(IV_LENGTH)
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
-  const plaintext = JSON.stringify(value)
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  const plaintext = zlib.gzipSync(Buffer.from(JSON.stringify(value), 'utf8'))
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()])
   const tag = cipher.getAuthTag()
   const blob = Buffer.concat([iv, tag, encrypted])
-  return { version: 1, ciphertext: blob.toString('base64') }
+  return { version: COMPRESSED_VERSION, ciphertext: blob.toString('base64') }
 }
 
 /**
@@ -62,6 +64,10 @@ export function decryptJson(envelope) {
   const data = raw.subarray(IV_LENGTH + TAG_LENGTH)
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
   decipher.setAuthTag(tag)
-  const plaintext = Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
-  return JSON.parse(plaintext)
+  const decrypted = Buffer.concat([decipher.update(data), decipher.final()])
+  const jsonText =
+    (envelope.version ?? 1) >= COMPRESSED_VERSION
+      ? zlib.gunzipSync(decrypted).toString('utf8')
+      : decrypted.toString('utf8')
+  return JSON.parse(jsonText)
 }

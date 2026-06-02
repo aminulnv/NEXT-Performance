@@ -21,7 +21,10 @@ Open your project → **SQL Editor** → run each file **in order**:
 | 8 | `supabase/migrations/00006_performance_encrypted_cache.sql` |
 | 9 | `supabase/migrations/00007_employees_directory.sql` |
 | 10 | `supabase/migrations/00008_employees_full_profile.sql` |
-| 11 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+| 11 | `supabase/migrations/00011_performance_cache_chunks.sql` |
+| 12 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+
+> **00011 — required for production:** splits the encrypted cache into small rows so Supabase PostgREST (8s statement timeout) can load the snapshot without timing out.
 
 > **Note:** Migrations 00006–00008 are numbered for historical repo order. On a fresh project, run 00009–00010 before 00006 if you prefer strict dependency order; all use `if not exists` / `add column if not exists` and are safe to run in the table order above.
 

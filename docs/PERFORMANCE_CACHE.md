@@ -67,5 +67,6 @@ Supabase admins can still see ciphertext blobs; encryption protects against DB l
 
 ## Refresh behavior
 
-- Normal page load: read Supabase/disk, optionally refresh Revolut in background if older than `STALE_REFRESH_MS`
+- Normal page load: read Supabase chunks/disk, optionally refresh Revolut in background if older than `STALE_REFRESH_MS`
 - **Refresh** button: HR/admin only when auth is on; `?refresh=1` fetches Revolut and re-saves encrypted snapshot
+- **PostgREST timeout:** Supabase API queries are limited to **8 seconds**. The encrypted cache is stored in **`performance_encrypted_cache_chunks`** (migration `00011`) so each row stays small. Run `00011` before warming cache on a new project.
