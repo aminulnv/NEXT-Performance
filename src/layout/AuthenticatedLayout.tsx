@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { AppLayout } from './AppLayout'
 import { useAuth } from '@/contexts/AuthContext'
+import { DataProvider } from '@/contexts/DataContext'
 import { layoutConfig, getPageTitle } from '@/config/layout'
 import { filterNavItems } from '@/lib/navFilter'
 import RoleProtectedRoute from '@/components/RoleProtectedRoute'
@@ -20,18 +21,20 @@ export default function AuthenticatedLayout() {
 
   return (
     <RoleProtectedRoute>
-      <TourProvider>
-        <AppLayout
-          {...layoutConfig}
-          navItems={navItems}
-          getPageTitle={getPageTitle}
-          userName={displayName}
-          profileLabel={displayName}
-          profileSubtext={user?.email}
-          onSignOut={signOut}
-        />
-        <PlatformTour />
-      </TourProvider>
+      <DataProvider>
+        <TourProvider>
+          <AppLayout
+            {...layoutConfig}
+            navItems={navItems}
+            getPageTitle={getPageTitle}
+            userName={displayName}
+            profileLabel={displayName}
+            profileSubtext={user?.email}
+            onSignOut={signOut}
+          />
+          <PlatformTour />
+        </TourProvider>
+      </DataProvider>
     </RoleProtectedRoute>
   )
 }

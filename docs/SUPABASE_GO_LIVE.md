@@ -16,9 +16,14 @@ Open your project → **SQL Editor** → run each file **in order**:
 | 3 | `supabase/migrations/00003_dashboard_access.sql` |
 | 4 | `supabase/migrations/00004_goals_storage.sql` |
 | 5 | `supabase/migrations/00005_performance_rls_by_role.sql` |
-| 6 | `supabase/migrations/00006_performance_encrypted_cache.sql` |
-| 7 | `supabase/migrations/00007_employees_directory.sql` |
-| 8 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+| 6 | `supabase/migrations/00009_security_hardening.sql` |
+| 7 | `supabase/migrations/00010_dashboard_permissions_config.sql` |
+| 8 | `supabase/migrations/00006_performance_encrypted_cache.sql` |
+| 9 | `supabase/migrations/00007_employees_directory.sql` |
+| 10 | `supabase/migrations/00008_employees_full_profile.sql` |
+| 11 | `supabase/seed/dashboard_users.sql` (or import CSV below) |
+
+> **Note:** Migrations 00006–00008 are numbered for historical repo order. On a fresh project, run 00009–00010 before 00006 if you prefer strict dependency order; all use `if not exists` / `add column if not exists` and are safe to run in the table order above.
 
 ---
 
@@ -104,9 +109,12 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 | Table | Purpose |
 |-------|---------|
 | `dashboard_users` | Email, role, employee_id — **who can log in** |
-| `performance_encrypted_cache` | Encrypted Revolut snapshot (API reads this first when configured) |
-| `performance_records` | Legacy plaintext schema (unused by API; prefer encrypted cache) |
+| `performance_encrypted_cache` | Encrypted Revolut performance snapshot (API reads this first) |
+| `employees` | Revolut People directory snapshot (612+ rows after sync) |
+| `employees_sync_state` | Latest employee sync metadata |
 | `goals_imports` | Shared goals CSV (latest upload; API writes with service role) |
+| `dashboard_permissions_config` | Role/page matrix from Admin → User management |
+| `performance_records` | Legacy plaintext schema (unused by API; prefer encrypted cache) |
 | `profiles` | Optional link to Supabase Auth users |
 | `saved_metric_views` | Per-user saved explore views |
 
@@ -114,7 +122,7 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 
 ## 8. Go-live checklist
 
-- [ ] All 6 migrations run in SQL Editor  
+- [ ] All migrations through `00010_dashboard_permissions_config.sql` run in SQL Editor  
 - [ ] `PERFORMANCE_DATA_ENCRYPTION_KEY` set on production host  
 - [ ] `npm run cache:warm` after first deploy (or when Revolut data changes)  
 - [ ] Seed admin user (`dashboard_users`)  

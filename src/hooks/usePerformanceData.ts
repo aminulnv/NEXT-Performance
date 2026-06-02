@@ -1,3 +1,4 @@
+import { useOptionalDataContext } from '@/contexts/DataContext'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAllPerformanceRecords } from '@/lib/performanceApi'
 import { buildDashboardSummary } from '@/lib/metrics'
@@ -12,17 +13,18 @@ type State = {
   warning: string | null
 }
 
-export function usePerformanceData() {
+function useLocalPerformanceData(enabled: boolean) {
   const [state, setState] = useState<State>({
     records: [],
     summary: null,
-    loading: true,
+    loading: enabled,
     error: null,
     cacheStatus: null,
     warning: null,
   })
 
   const reload = useCallback(async (refresh = false) => {
+    if (!enabled) return
     setState((s) => ({ ...s, loading: true, error: null, warning: null }))
     try {
       const { records, fetchedAt, cacheStatus, warning } =
@@ -45,11 +47,26 @@ export function usePerformanceData() {
         error: message,
       }))
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) return
     reload(false)
-  }, [reload])
+  }, [enabled, reload])
 
   return { ...state, reload: () => reload(true) }
+}
+
+export function usePerformanceData() {
+  const data = useOptionalDataContext()
+  const local = useLocalPerformanceData(!data)
+
+  if (data) {
+    return {
+      ...data.performance,
+      reload: () => data.reloadPerformance(true),
+    }
+  }
+
+  return local
 }

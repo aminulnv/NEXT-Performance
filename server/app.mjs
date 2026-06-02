@@ -109,6 +109,7 @@ registerPermissionsRoutes(app)
 let memoryCache = null
 let memoryCacheAt = 0
 let refreshInFlight = null
+let employeesRefreshInFlight = null
 
 registerEmployeeCacheAccessor(() => memoryCache)
 
@@ -119,6 +120,12 @@ registerEmployeesDirectoryMerger((index) => {
     ...index,
   }
 })
+
+const PRIVATE_CACHE = 'private, max-age=120, stale-while-revalidate=600'
+
+function sendPrivateCache(res) {
+  res.set('Cache-Control', PRIVATE_CACHE)
+}
 
 function toApiPayload(cache, req) {
   const records = isAuthEnabled() && req.user
@@ -176,10 +183,64 @@ async function loadDiskIntoMemory() {
 }
 
 function scheduleBackgroundRefreshIfStale() {
-  if (isServerless() || refreshInFlight || !memoryCache?.fetchedAt) return
+  if (refreshInFlight || !memoryCache?.fetchedAt) return
   const age = Date.now() - new Date(memoryCache.fetchedAt).getTime()
   if (age < STALE_REFRESH_MS) return
   refreshCache().catch((err) => console.error('[cache] Background refresh failed:', err.message))
+}
+
+function startBackgroundRefresh() {
+  if (refreshInFlight) return refreshInFlight
+  refreshCache().catch((err) => console.error('[cache] Background refresh failed:', err.message))
+  return refreshInFlight
+}
+
+function startBackgroundEmployeesRefresh() {
+  if (employeesRefreshInFlight) return employeesRefreshInFlight
+  employeesRefreshInFlight = fetchRevolutEmployeesList()
+    .then((fetched) => {
+      if (memoryCache) {
+        memoryCache.employeesDirectory = fetched.employeesDirectory
+        memoryCache.employeesByEmail = {
+          ...(memoryCache.employeesByEmail ?? {}),
+          ...fetched.index,
+        }
+        memoryCache.fetchedAt = fetched.fetchedAt
+      } else {
+        memoryCache = {
+          fetchedAt: fetched.fetchedAt,
+          recordCount: 0,
+          records: [],
+          employeesByEmail: fetched.index,
+          employeesDirectory: fetched.employeesDirectory,
+          cacheStatus: 'live-employees',
+        }
+        memoryCacheAt = Date.now()
+      }
+      return fetched
+    })
+    .catch((err) => {
+      console.error('[employees] Background refresh failed:', err.message)
+      throw err
+    })
+    .finally(() => {
+      employeesRefreshInFlight = null
+    })
+  return employeesRefreshInFlight
+}
+
+function emptyWarmingCache() {
+  return {
+    fetchedAt: new Date().toISOString(),
+    recordCount: 0,
+    records: [],
+    employeesByEmail: null,
+    employeesDirectory: null,
+    cacheStatus: 'warming',
+    warning:
+      'Data is syncing from Revolut into Supabase. Reload in a minute or use Admin → Data Health to refresh.',
+    refreshing: true,
+  }
 }
 
 async function loadPersistedCache() {
@@ -209,7 +270,7 @@ function applyMemoryCache(data) {
 async function resolveCache({ force = false } = {}) {
   const now = Date.now()
 
-  if (!force && !isServerless() && memoryCache && now - memoryCacheAt < CACHE_MS) {
+  if (!force && memoryCache && now - memoryCacheAt < CACHE_MS) {
     return memoryCache
   }
 
@@ -228,11 +289,28 @@ async function resolveCache({ force = false } = {}) {
 
   if (refreshInFlight) {
     const persisted = await loadPersistedCache()
-    if (persisted) return persisted
-    return refreshInFlight
+    if (persisted) {
+      applyMemoryCache(persisted)
+      return { ...memoryCache, refreshing: true }
+    }
+    if (memoryCache) {
+      return { ...memoryCache, refreshing: true }
+    }
   }
 
-  return refreshCache()
+  startBackgroundRefresh()
+
+  const persistedAfterKick = await loadPersistedCache()
+  if (persistedAfterKick) {
+    applyMemoryCache(persistedAfterKick)
+    return { ...memoryCache, refreshing: Boolean(refreshInFlight) }
+  }
+
+  if (memoryCache) {
+    return { ...memoryCache, refreshing: Boolean(refreshInFlight) }
+  }
+
+  return emptyWarmingCache()
 }
 
 function requirePerformanceApiAccess(req, res, next) {
@@ -342,6 +420,7 @@ app.get('/api/cron/warm-cache', async (req, res) => {
 app.get('/api/goals', requireAuth, requireGoalsRead, async (req, res) => {
   try {
     const data = await loadGoalsDataset()
+    sendPrivateCache(res)
     res.json({
       goals: data.goals,
       columns: data.columns,
@@ -400,6 +479,7 @@ app.get(
         return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
       }
       const data = await resolveCache({ force })
+      sendPrivateCache(res)
       res.json(toApiPayload(data, req))
     } catch (err) {
       console.error(err)
@@ -433,13 +513,15 @@ app.get(
         return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
       }
 
-      if (!force && !isServerless() && memoryCache?.employeesDirectory?.length) {
+      sendPrivateCache(res)
+
+      if (!force && memoryCache?.employeesDirectory?.length) {
         return res.json({
           employees: memoryCache.employeesDirectory,
           count: memoryCache.employeesDirectory.length,
           fetchedAt: memoryCache.fetchedAt,
           source: memoryCache.cacheStatus ?? 'memory',
-          refreshing: Boolean(refreshInFlight),
+          refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
         })
       }
 
@@ -456,7 +538,7 @@ app.get(
               count: fromSupabase.count,
               fetchedAt: fromSupabase.fetchedAt,
               source: fromSupabase.source,
-              refreshing: Boolean(refreshInFlight),
+              refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
             })
           }
         } catch (err) {
@@ -476,9 +558,22 @@ app.get(
             count: persisted.employeesDirectory.length,
             fetchedAt: persisted.fetchedAt,
             source: persisted.cacheStatus ?? 'disk',
-            refreshing: Boolean(refreshInFlight),
+            refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
           })
         }
+      }
+
+      if (!force) {
+        startBackgroundEmployeesRefresh()
+        return res.json({
+          employees: [],
+          count: 0,
+          fetchedAt: new Date().toISOString(),
+          source: 'warming',
+          refreshing: true,
+          warning:
+            'Employee directory is syncing from Revolut into Supabase. Reload shortly.',
+        })
       }
 
       const fetched = await fetchRevolutEmployeesList()

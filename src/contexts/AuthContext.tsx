@@ -11,6 +11,7 @@ import { fetchAuthMe, googleLoginUrl, logout as apiLogout, type AuthUser } from 
 import type { Role } from '@/lib/permissions'
 import { canAccessPath, roleHasPage, canManageUsers } from '@/lib/permissions'
 import { clearTourDismissed } from '@/lib/platformTour'
+import { clearBrowserCache } from '@/lib/browserCache'
 
 type AuthContextValue = {
   user: AuthUser | null
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     if (env.bypassAuth) return
     clearTourDismissed()
+    await clearBrowserCache()
     await apiLogout()
     setUser(null)
     window.location.href = '/login'

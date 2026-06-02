@@ -1,3 +1,4 @@
+import { useOptionalDataContext } from '@/contexts/DataContext'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchGoals, uploadGoalsCsv } from '@/lib/goalsApi'
 import type { GoalRecord, GoalsDataset } from '@/types/goals'
@@ -9,15 +10,16 @@ type State = {
   error: string | null
 }
 
-export function useGoalsData() {
+function useLocalGoalsData(enabled: boolean) {
   const [state, setState] = useState<State>({
     dataset: null,
-    loading: true,
+    loading: enabled,
     uploading: false,
     error: null,
   })
 
   const reload = useCallback(async () => {
+    if (!enabled) return
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
       const dataset = await fetchGoals()
@@ -29,6 +31,9 @@ export function useGoalsData() {
   }, [])
 
   const uploadCsv = useCallback(async (csvText: string) => {
+    if (!enabled) {
+      throw new Error('Goals upload is unavailable outside authenticated layout')
+    }
     setState((s) => ({ ...s, uploading: true, error: null }))
     try {
       const dataset = await uploadGoalsCsv(csvText)
@@ -39,11 +44,12 @@ export function useGoalsData() {
       setState((s) => ({ ...s, uploading: false, error: message }))
       throw err
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) return
     reload()
-  }, [reload])
+  }, [enabled, reload])
 
   return {
     ...state,
@@ -51,6 +57,22 @@ export function useGoalsData() {
     reload,
     uploadCsv,
   }
+}
+
+export function useGoalsData() {
+  const data = useOptionalDataContext()
+  const local = useLocalGoalsData(!data)
+
+  if (data) {
+    return {
+      ...data.goals,
+      goals: data.goals.dataset?.goals ?? [],
+      reload: data.reloadGoals,
+      uploadCsv: data.uploadGoalsCsv,
+    }
+  }
+
+  return local
 }
 
 export function goalsForEmployee(goals: GoalRecord[], employeeId: string) {

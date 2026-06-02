@@ -4,10 +4,11 @@ Revolut API sync is slow (many paginated calls + rate limits). The API serves **
 
 ## Layers (fastest first)
 
-1. **Memory** — same process, `API_CACHE_MS` (default 1 hour)
-2. **Supabase** — AES-256-GCM encrypted snapshot (`performance_encrypted_cache`)
-3. **Disk** — `server/.cache/performance-records.json` (fallback / local dev)
-4. **Live Revolut** — background or on demand (`?refresh=1`)
+1. **Browser (IndexedDB)** — instant repeat visits; per-user cache cleared on logout
+2. **Memory** — same process, `API_CACHE_MS` (default 1 hour)
+3. **Supabase** — AES-256-GCM encrypted snapshot (`performance_encrypted_cache`) + `employees` + `goals_imports`
+4. **Disk** — `server/.cache/performance-records.json` (fallback / local dev)
+5. **Live Revolut** — background only, or on demand (`?refresh=1`)
 
 ## Setup
 
