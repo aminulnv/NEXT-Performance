@@ -80,7 +80,7 @@ export type EmployeeGoalStatus = {
 }
 
 export type GoalSubmissionCounts = {
-  submitted: { count: number; pct: number }
+  submitted: { count: number; goalCount: number; pct: number }
   pendingSubmission: { count: number; pct: number }
   awaitingApproval: { count: number; pct: number }
   approvedLocked: { count: number; pct: number }
@@ -247,9 +247,12 @@ export type RatingMonitoringSummary = {
 function field(goal: GoalRecord, ...keys: string[]): string | null {
   const fields = goal.fields
   if (!fields || typeof fields !== 'object') return null
+  const normalizedFields = new Map(
+    Object.entries(fields).map(([key, value]) => [key.trim().toLowerCase(), value]),
+  )
   for (const key of keys) {
-    const v = fields[key]
-    if (v != null && String(v).trim() !== '') return String(v).trim()
+    const value = normalizedFields.get(key.trim().toLowerCase())
+    if (value != null && String(value).trim() !== '') return String(value).trim()
   }
   return null
 }
@@ -272,7 +275,7 @@ export function goalReviewCycle(goal: GoalRecord): string | null {
   return (
     nonEmpty(goal.review_cycle) ??
     nonEmpty(goal.cycle_name) ??
-    field(goal, 'Review cycle', 'Cycle Name', 'Cycle') ??
+    field(goal, 'Review Cycle', 'Review cycle', 'Cycle Name', 'Cycle') ??
     null
   )
 }
@@ -1073,7 +1076,10 @@ export function buildGoalsMonitoringSummary(
     approvalRatePct: pct(fullyApproved.length, total),
     progressUpdateRatePct: pct(withProgress.length, total),
     submissionCounts: {
-      submitted: countBucket(submittedEmployees.length, total),
+      submitted: {
+        ...countBucket(submittedEmployees.length, total),
+        goalCount: submittedEmployees.reduce((sum, employee) => sum + employee.submittedGoalCount, 0),
+      },
       pendingSubmission: countBucket(notSubmitted.length, total),
       awaitingApproval: countBucket(awaitingApprovalEmployees.length, total),
       approvedLocked: countBucket(fullyApproved.length, total),

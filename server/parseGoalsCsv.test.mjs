@@ -12,4 +12,14 @@ describe('parseGoalsCsv', () => {
     assert.equal(goals[0].employee_id, '304')
     assert.equal(goals[0].title, 'Improve automation')
   })
+
+  it('prefers populated Review Cycle over empty Cycle column', () => {
+    const csv = `Cycle,Review Cycle,Goal,Owner,Employee ID
+,Q2 Cycle,Improve automation,alice@co.com,304
+,Q2 Cycle,Ship feature,bob@co.com,305`
+    const { goals, columnMap } = parseGoalsCsv(csv)
+    assert.equal(columnMap.cycleName, 'Review Cycle')
+    assert.equal(goals[0].review_cycle, 'Q2 Cycle')
+    assert.equal(goals[1].review_cycle, 'Q2 Cycle')
+  })
 })

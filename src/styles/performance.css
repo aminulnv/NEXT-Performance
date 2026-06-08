@@ -163,6 +163,14 @@
   flex-shrink: 0;
 }
 
+.pd-page-header__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .pd-page-title {
   margin: 0;
   font-size: 1.5rem;
@@ -181,6 +189,11 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 1rem;
+}
+
+.pd-stat-grid--wrap {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
 .pd-stat-card {
@@ -381,10 +394,30 @@
 }
 
 .pd-panel-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin: 0 0 1rem;
   font-size: 1rem;
   font-weight: 600;
   color: #111827;
+}
+
+.pd-panel-title__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0.125rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
 }
 
 .pd-section-title {
@@ -489,6 +522,11 @@
   font-size: 0.9375rem;
   line-height: 1.35;
   margin-bottom: 0.75rem;
+}
+
+.pd-flag-panel .pd-panel-title__count {
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.4rem;
 }
 
 .pd-flag-panel-toolbar {
@@ -1814,10 +1852,15 @@ a.pd-preset-card--link {
 
 .pd-section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.pd-section-header .pd-section-title {
+  margin: 0;
 }
 
 .pd-table-actions--wrap {

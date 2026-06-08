@@ -51,9 +51,11 @@ describe('calendarQuarters', () => {
     expect(reviewCyclesMatch('2026 H1', 'Q2 2026')).toBe(true)
     expect(reviewCyclesMatch('2026 H2', 'Q3 2026')).toBe(true)
     expect(reviewCyclesMatch('Q2 2026', 'Q2 2026 · Goals')).toBe(true)
+    expect(reviewCyclesMatch('Q2 2026', 'Q2 Cycle')).toBe(true)
     expect(reviewCyclesMatch('LT 2025', 'LT 2025 Performance Eval')).toBe(true)
     expect(reviewCyclesMatch('2026 H1', 'Q3 2026')).toBe(false)
     expect(reviewCyclesMatch('Q1 2026', 'Q2 2026')).toBe(false)
+    expect(reviewCyclesMatch('Q1 2026', 'Q2 Cycle')).toBe(false)
   })
 
   it('detects joining cutoff from Q2 2026 onward', () => {

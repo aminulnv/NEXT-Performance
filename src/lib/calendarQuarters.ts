@@ -121,6 +121,18 @@ export function parseQuarterYearFromCycle(
   }
 }
 
+/** Parses quarter from labels like "Q2 Cycle" that omit the year. */
+export function parseQuarterOnlyFromCycle(
+  cycle: string | null | undefined,
+): CalendarQuarter | null {
+  const text = cycle?.trim()
+  if (!text) return null
+  if (/\b\d{4}\b/.test(text)) return null
+  const match = text.match(/\bQ\s*([1-4])\b/i)
+  if (!match) return null
+  return Number(match[1]) as CalendarQuarter
+}
+
 /** Revolut cycle labels often include a stage suffix after a middle dot. */
 export function normalizeReviewCycleLabel(cycle: string | null | undefined): string {
   if (!cycle) return ''
@@ -182,6 +194,20 @@ export function reviewCyclesMatch(
   }
   if (filterHalf && cycleHalf) {
     return filterHalf.half === cycleHalf.half && filterHalf.year === cycleHalf.year
+  }
+
+  const filterQuarterOnly = parseQuarterOnlyFromCycle(left)
+  const cycleQuarterOnly = parseQuarterOnlyFromCycle(right)
+
+  // Goals CSV often uses quarter-only labels like "Q2 Cycle" while performance uses "Q2 2026".
+  if (filterQuarter && cycleQuarterOnly) {
+    return filterQuarter.quarter === cycleQuarterOnly
+  }
+  if (cycleQuarter && filterQuarterOnly) {
+    return cycleQuarter.quarter === filterQuarterOnly
+  }
+  if (filterQuarterOnly && cycleQuarterOnly) {
+    return filterQuarterOnly === cycleQuarterOnly
   }
 
   return false

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useGoalsData } from '@/hooks/useGoalsData'
 import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { usePerformanceData } from '@/hooks/usePerformanceData'
@@ -18,6 +18,7 @@ import {
   formatQuarterYear,
   quarterHasStarted,
   quarterStartDate,
+  reviewCyclesMatch,
   type CalendarQuarter,
 } from '@/lib/calendarQuarters'
 import { CheckInCompletionPanel } from '@/components/goals/CheckInCompletionPanel'
@@ -40,7 +41,7 @@ import {
 import type { EmployeeGoalStatus, GoalBreakdownRow } from '@/lib/goalsMonitoring'
 import { PersonAvatar } from '@/components/performance/PersonAvatar'
 import { uniqueFieldValues } from '@/lib/metrics'
-import { personGoalsSearchUrl } from '@/lib/goalsFilters'
+import { allGoalsDetailsUrl, personGoalsSearchUrl } from '@/lib/goalsFilters'
 import type { FlagPersonRow } from '@/lib/goalOwnerProfiles'
 import '@/styles/performance.css'
 
@@ -131,7 +132,7 @@ function NotSubmittedByDayPanel({
   const listTitle = `Not submitted by Day ${dayThreshold}`
 
   return (
-    <Panel title="Not submitted by day">
+    <Panel title="Not submitted by day" count={pastThreshold ? rows.length : undefined}>
       {!quarterSelected ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           Select a calendar quarter to track Day 10, 15, and 30 submission deadlines.
@@ -258,7 +259,7 @@ function FlagPanel({
   const autoColumns = showManagerName || showSubmittedGoalCount
 
   return (
-    <Panel title={title}>
+    <Panel title={title} count={rows.length}>
       {rows.length === 0 ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           {emptyText}
@@ -366,7 +367,7 @@ function SubmissionBreakdownTable({
   showRowAvatar?: boolean
 }) {
   return (
-    <Panel title={title}>
+    <Panel title={title} count={rows.length}>
       {rows.length === 0 ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           No data for this breakdown.
@@ -425,7 +426,7 @@ function LowSubmissionDepartmentsPanel({ rows }: { rows: LowSubmissionDepartment
   const title = 'Departments below 60% submission'
 
   return (
-    <Panel title={title}>
+    <Panel title={title} count={rows.length}>
       {rows.length === 0 ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           All departments with 3+ employees are at or above 60% submission.
@@ -456,10 +457,23 @@ function LowSubmissionDepartmentsPanel({ rows }: { rows: LowSubmissionDepartment
   )
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({
+  title,
+  count,
+  children,
+}: {
+  title: string
+  count?: number
+  children: ReactNode
+}) {
   return (
     <div className="pd-panel pd-flag-panel">
-      <h3 className="pd-panel-title">{title}</h3>
+      <h3 className="pd-panel-title">
+        <span>{title}</span>
+        {count != null ? (
+          <span className="pd-panel-title__count">{count.toLocaleString()}</span>
+        ) : null}
+      </h3>
       {children}
     </div>
   )
@@ -472,15 +486,24 @@ function FlagPanelGrid({ children }: { children: ReactNode }) {
 function Section({
   title,
   description,
+  action,
   children,
 }: {
   title: string
   description?: ReactNode
+  action?: ReactNode
   children?: ReactNode
 }) {
   return (
     <section className="pd-section" style={{ marginTop: '2rem' }}>
-      <h2 className="pd-section-title">{title}</h2>
+      {action ? (
+        <div className="pd-section-header">
+          <h2 className="pd-section-title">{title}</h2>
+          {action}
+        </div>
+      ) : (
+        <h2 className="pd-section-title">{title}</h2>
+      )}
       {description && <p className="pd-section-desc">{description}</p>}
       {children}
     </section>
@@ -513,21 +536,19 @@ export default function MonitoringPage() {
   const perfCycles = useMemo(() => uniqueFieldValues(records, 'cycle_name'), [records])
   const reviewCycles = useMemo(() => {
     const cycles = new Set<string>()
-    for (const cycle of perfCycles) cycles.add(cycle)
     for (const cycle of goalCycles) cycles.add(cycle)
+    for (const cycle of perfCycles) cycles.add(cycle)
     return [...cycles].sort((a, b) => a.localeCompare(b))
   }, [perfCycles, goalCycles])
 
-  const [reviewCycleFilter, setReviewCycleFilter] = useState('')
+  const [reviewCycleFilter, setReviewCycleFilter] = useState('Q2 2026')
   const [devSearch, setDevSearch] = useState('')
   const [devDeptFilter, setDevDeptFilter] = useState('')
   const [devCycleFilter, setDevCycleFilter] = useState('')
   const [devRatingFilter, setDevRatingFilter] = useState('')
   const [devPage, setDevPage] = useState(1)
-  const [calendarQuarter, setCalendarQuarter] = useState<CalendarQuarter | null>(() =>
-    currentCalendarQuarter(),
-  )
-  const [calendarYear, setCalendarYear] = useState(() => currentCalendarYear())
+  const [calendarQuarter, setCalendarQuarter] = useState<CalendarQuarter | null>(2)
+  const [calendarYear, setCalendarYear] = useState(2026)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const quarterSelected = calendarQuarter != null
 
@@ -619,6 +640,27 @@ export default function MonitoringPage() {
 
   const counts = goalsSummary.submissionCounts
   const managerCompliance = goalsSummary.managerCompliance
+
+  const exportStats = useMemo(() => {
+    const filteredGoals = reviewCycleFilter
+      ? goals.filter((goal) => goalMatchesReviewCycle(goal, reviewCycleFilter))
+      : goals
+    const uniqueGoalIds = new Set(
+      filteredGoals.map((goal) => goal.goal_id?.trim() || goal.id).filter(Boolean),
+    )
+    return {
+      metricRows: filteredGoals.length,
+      uniqueGoals: uniqueGoalIds.size,
+    }
+  }, [goals, reviewCycleFilter])
+
+  const goalsDetailsUrl = useMemo(() => {
+    if (!reviewCycleFilter) return allGoalsDetailsUrl()
+    const matchedGoalCycle = goalCycles.find((cycle) =>
+      reviewCyclesMatch(reviewCycleFilter, cycle),
+    )
+    return allGoalsDetailsUrl(matchedGoalCycle ?? reviewCycleFilter)
+  }, [reviewCycleFilter, goalCycles])
 
   const devRows = ratingSummary.devOrUnsatisfactory
 
@@ -784,11 +826,24 @@ export default function MonitoringPage() {
               ) : reviewCycleFilter && !selectedCycleHasGoals ? (
                 <EmptyState
                   title="No goals found"
-                  description={`No employee goals were exported for ${reviewCycleFilter}. Upload an updated Goals CSV or choose another review cycle.`}
+                  description={
+                    goalCycles.length > 0
+                      ? `No employee goals match ${reviewCycleFilter}. Your goals export uses ${goalCycles.join(', ')} — try one of those review cycles, or choose All cycles.`
+                      : `No employee goals were exported for ${reviewCycleFilter}. Upload an updated Goals CSV or choose another review cycle.`
+                  }
                 />
               ) : (
                 <>
-          <Section title="Goal submission & approval">
+          <Section
+            title="Goal submission & approval"
+            action={
+              goals.length > 0 ? (
+                <Link to={goalsDetailsUrl} className="pd-btn">
+                  View Goals
+                </Link>
+              ) : null
+            }
+          >
             <div className="pd-stat-grid">
               <StatCard
                 label="Total employees"
@@ -798,9 +853,10 @@ export default function MonitoringPage() {
               />
               <StatCard
                 label="Goals submitted"
-                count={counts.submitted.count}
+                count={counts.submitted.goalCount}
                 pct={counts.submitted.pct}
                 showProgress
+                hint={`${counts.submitted.count.toLocaleString()} ${counts.submitted.count === 1 ? 'person' : 'people'} · ${exportStats.metricRows.toLocaleString()} metrics · ${exportStats.uniqueGoals.toLocaleString()} goals in export`}
                 accent="success"
                 labelHelp={GOALS_METRIC_HELP.submissionRate}
               />

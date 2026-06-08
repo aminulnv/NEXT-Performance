@@ -3,7 +3,7 @@ export const GOALS_METRIC_HELP = {
   totalEmployees:
     'Active employees from Organization → People (Revolut directory), matched to goals by employee ID or email. From Q2 2026 onward, only people who joined on or before the quarter start date are counted (e.g. joined by 1 Apr for Q2).',
   submissionRate:
-    '% of active employees who submitted employee KPI goals (not draft, has a title).',
+    'Submitted employee KPI goals (approval status is not draft). Each Revolut goal can have multiple metric rows in the CSV — this count rolls them up by Goal ID. The percentage is the share of active employees who submitted at least one goal.',
   pendingSubmission:
     'People who have not started or submitted employee goals (draft or empty title).',
   awaitingApproval:
@@ -28,4 +28,14 @@ export const GOALS_METRIC_HELP = {
     'Employees with zero submitted goals on or after Day 10 of the selected quarter.',
   lowSubmissionDepartments:
     'Departments with at least 3 employees in scope and below 60% goal submission rate.',
+  metricRows:
+    'Rows in the goals CSV export. Each goal can have multiple metric rows (one per KPI).',
+  uniqueGoals:
+    'Distinct goals after rolling up metric rows by Goal ID.',
+  submittedGoalsExport:
+    'Goals with approval status other than draft (pending or approved), rolled up by Goal ID.',
+  draftGoalsExport:
+    'Goals still in draft approval status across all metric rows.',
+  peopleWithGoals:
+    'Distinct employees (by owner email or name) in the current filter scope.',
 } as const

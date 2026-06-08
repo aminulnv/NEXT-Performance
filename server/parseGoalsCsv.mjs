@@ -20,7 +20,7 @@ const COLUMN_ALIASES = {
   ],
   owner: ['owner', 'owner email', 'assignee email'],
   ownerFullName: ['owner full name'],
-  cycleName: ['cycle', 'cycle name', 'period', 'review cycle', 'goal cycle'],
+  cycleName: ['review cycle', 'cycle name', 'goal cycle', 'cycle', 'period'],
   title: ['goal', 'goal title', 'title', 'objective', 'key result', 'goal name', 'okr'],
   status: ['goal status', 'status', 'state', 'progress status'],
   progress: ['progress', 'completion', 'completion %', 'completion percent', '% complete'],
@@ -53,13 +53,35 @@ function normalizeHeader(header) {
     .replace(/\s+/g, ' ')
 }
 
-function pickColumn(headers, aliases) {
+function pickColumn(headers, rows, aliases) {
   const normalized = headers.map(normalizeHeader)
-  for (const alias of aliases) {
-    const index = normalized.indexOf(alias)
-    if (index >= 0) return headers[index]
+  const aliasSet = new Set(aliases)
+  const candidates = []
+
+  for (let index = 0; index < headers.length; index += 1) {
+    if (aliasSet.has(normalized[index])) {
+      candidates.push(headers[index])
+    }
   }
-  return null
+
+  if (candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0]
+
+  // Prefer the column that actually contains values (e.g. "Review Cycle" over empty "Cycle").
+  let bestHeader = candidates[0]
+  let bestCount = -1
+  for (const header of candidates) {
+    let count = 0
+    for (const row of rows) {
+      const value = row[header]
+      if (value != null && String(value).trim() !== '') count += 1
+    }
+    if (count > bestCount) {
+      bestCount = count
+      bestHeader = header
+    }
+  }
+  return bestHeader
 }
 
 function rowId(row, index) {
@@ -100,22 +122,22 @@ export function parseGoalsCsv(csvText) {
 
   const headers = Object.keys(rows[0])
   const columnMap = {
-    employeeId: pickColumn(headers, COLUMN_ALIASES.employeeId),
-    employeeName: pickColumn(headers, COLUMN_ALIASES.employeeName),
-    owner: pickColumn(headers, COLUMN_ALIASES.owner),
-    ownerFullName: pickColumn(headers, COLUMN_ALIASES.ownerFullName),
-    cycleName: pickColumn(headers, COLUMN_ALIASES.cycleName),
-    title: pickColumn(headers, COLUMN_ALIASES.title),
-    status: pickColumn(headers, COLUMN_ALIASES.status),
-    progress: pickColumn(headers, COLUMN_ALIASES.progress),
-    goalId: pickColumn(headers, COLUMN_ALIASES.goalId),
-    approvalStatus: pickColumn(headers, COLUMN_ALIASES.approvalStatus),
-    organisationUnit: pickColumn(headers, COLUMN_ALIASES.organisationUnit),
-    organisationName: pickColumn(headers, COLUMN_ALIASES.organisationName),
-    currentValue: pickColumn(headers, COLUMN_ALIASES.currentValue),
-    initialValue: pickColumn(headers, COLUMN_ALIASES.initialValue),
-    submittedAt: pickColumn(headers, COLUMN_ALIASES.submittedAt),
-    approvedAt: pickColumn(headers, COLUMN_ALIASES.approvedAt),
+    employeeId: pickColumn(headers, rows, COLUMN_ALIASES.employeeId),
+    employeeName: pickColumn(headers, rows, COLUMN_ALIASES.employeeName),
+    owner: pickColumn(headers, rows, COLUMN_ALIASES.owner),
+    ownerFullName: pickColumn(headers, rows, COLUMN_ALIASES.ownerFullName),
+    cycleName: pickColumn(headers, rows, COLUMN_ALIASES.cycleName),
+    title: pickColumn(headers, rows, COLUMN_ALIASES.title),
+    status: pickColumn(headers, rows, COLUMN_ALIASES.status),
+    progress: pickColumn(headers, rows, COLUMN_ALIASES.progress),
+    goalId: pickColumn(headers, rows, COLUMN_ALIASES.goalId),
+    approvalStatus: pickColumn(headers, rows, COLUMN_ALIASES.approvalStatus),
+    organisationUnit: pickColumn(headers, rows, COLUMN_ALIASES.organisationUnit),
+    organisationName: pickColumn(headers, rows, COLUMN_ALIASES.organisationName),
+    currentValue: pickColumn(headers, rows, COLUMN_ALIASES.currentValue),
+    initialValue: pickColumn(headers, rows, COLUMN_ALIASES.initialValue),
+    submittedAt: pickColumn(headers, rows, COLUMN_ALIASES.submittedAt),
+    approvedAt: pickColumn(headers, rows, COLUMN_ALIASES.approvedAt),
   }
 
   const str = (value) => {

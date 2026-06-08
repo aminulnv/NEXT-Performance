@@ -4,6 +4,7 @@ export type GoalsSearchParams = {
   employee?: string
   owner?: string
   search?: string
+  cycle?: string
 }
 
 export function employeeGoalsUrl(opts: {
@@ -28,14 +29,23 @@ export function personGoalsSearchUrl(name: string): string | null {
   return `${routes.goals.root}?${new URLSearchParams({ search: query })}`
 }
 
+/** Open Goals with optional review cycle filter (from Monitoring or elsewhere). */
+export function allGoalsDetailsUrl(cycle?: string | null): string {
+  const cycleValue = cycle?.trim()
+  if (!cycleValue) return routes.goals.root
+  return `${routes.goals.root}?${new URLSearchParams({ cycle: cycleValue })}`
+}
+
 export function readGoalsFilters(searchParams: URLSearchParams): GoalsSearchParams {
   const employee = searchParams.get('employee')?.trim()
   const owner = searchParams.get('owner')?.trim()
   const search = searchParams.get('search')?.trim()
+  const cycle = searchParams.get('cycle')?.trim()
   return {
     employee: employee || undefined,
     owner: owner || undefined,
     search: search || undefined,
+    cycle: cycle || undefined,
   }
 }
 
@@ -44,5 +54,6 @@ export function clearEmployeeGoalsParams(searchParams: URLSearchParams): URLSear
   next.delete('employee')
   next.delete('owner')
   next.delete('search')
+  next.delete('cycle')
   return next
 }

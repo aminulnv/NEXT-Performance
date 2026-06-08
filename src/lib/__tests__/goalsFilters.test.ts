@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { employeeGoalsUrl, personGoalsSearchUrl, readGoalsFilters } from '@/lib/goalsFilters'
+import { allGoalsDetailsUrl, employeeGoalsUrl, personGoalsSearchUrl, readGoalsFilters } from '@/lib/goalsFilters'
 
 describe('employeeGoalsUrl', () => {
   it('builds goals URL with employee id', () => {
@@ -40,5 +40,21 @@ describe('readGoalsFilters', () => {
   it('reads search from search params', () => {
     const params = new URLSearchParams('search=SM+Fahim')
     expect(readGoalsFilters(params)).toEqual({ search: 'SM Fahim' })
+  })
+
+  it('reads cycle from search params', () => {
+    const params = new URLSearchParams('cycle=Q2+Cycle')
+    expect(readGoalsFilters(params)).toEqual({ cycle: 'Q2 Cycle' })
+  })
+})
+
+describe('allGoalsDetailsUrl', () => {
+  it('builds goals URL without cycle', () => {
+    expect(allGoalsDetailsUrl()).toBe('/goals')
+    expect(allGoalsDetailsUrl('')).toBe('/goals')
+  })
+
+  it('builds goals URL with cycle filter', () => {
+    expect(allGoalsDetailsUrl('Q2 Cycle')).toBe('/goals?cycle=Q2+Cycle')
   })
 })

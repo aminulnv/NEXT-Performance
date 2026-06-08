@@ -193,6 +193,33 @@ describe('goalReviewCycle', () => {
     expect(() => uniqueReviewCycles(goals)).not.toThrow()
   })
 
+  it('reads review cycle from fields when normalized columns are empty', () => {
+    const goals: GoalRecord[] = [
+      {
+        id: 'from-fields',
+        employee_id: '1',
+        employee_name: null,
+        owner: 'alice@co.com',
+        owner_full_name: null,
+        cycle_name: null,
+        review_cycle: null,
+        title: 'Test',
+        status: null,
+        progress: null,
+        goal_id: 'g1',
+        approval_status: null,
+        organisation_unit: 'Employee Kpi',
+        organisation_name: null,
+        current_value: null,
+        initial_value: null,
+        submitted_at: null,
+        approved_at: null,
+        fields: { 'Review Cycle': 'Q2 Cycle' },
+      },
+    ]
+    expect(uniqueReviewCycles(goals)).toEqual(['Q2 Cycle'])
+  })
+
   it('matches performance half-year labels to quarterly goal cycles', () => {
     const goals: GoalRecord[] = [
       goal({
@@ -261,6 +288,7 @@ describe('buildGoalsMonitoringSummary', () => {
     expect(summary.submissionRatePct).toBe(67)
     expect(summary.approvalRatePct).toBe(33)
     expect(summary.submissionCounts.submitted.count).toBe(2)
+    expect(summary.submissionCounts.submitted.goalCount).toBe(2)
     expect(summary.submissionCounts.pendingSubmission.count).toBe(1)
     expect(summary.submissionCounts.awaitingApproval.count).toBe(1)
     expect(summary.submissionCounts.approvedLocked.count).toBe(1)
@@ -269,6 +297,30 @@ describe('buildGoalsMonitoringSummary', () => {
     expect(summary.awaitingApproval).toHaveLength(1)
     expect(summary.approvedLocked).toHaveLength(1)
     expect(summary.submittedNotApproved).toHaveLength(1)
+  })
+
+  it('matches performance review cycle labels to quarter-only goal cycles', () => {
+    const goals: GoalRecord[] = [
+      goal({
+        id: 'a1',
+        goal_id: '10',
+        owner: 'alice@co.com',
+        employee_id: 'emp-a',
+        title: 'Goal A',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'approved',
+        review_cycle: 'Q2 Cycle',
+      }),
+    ]
+
+    const summary = buildGoalsMonitoringSummary(goals, {
+      cycleFilter: 'Q2 2026',
+      calendarQuarter: 2,
+      calendarYear: 2026,
+      activeRoster: q2Roster,
+    })
+
+    expect(summary.submissionCounts.submitted.count).toBe(1)
   })
 
   it('flags overdue approvals after Day 30 of the quarter', () => {

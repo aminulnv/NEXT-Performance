@@ -5,7 +5,9 @@ import { GoalsCsvUpload } from '@/components/goals/GoalsCsvUpload'
 import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
 import { formatGoalStatusLabel, GoalStatusChip } from '@/components/goals/GoalStatusChip'
-import { goalReviewCycle } from '@/lib/goalsMonitoring'
+import { StatCard } from '@/components/performance/StatCard'
+import { goalMatchesReviewCycle, goalReviewCycle } from '@/lib/goalsMonitoring'
+import { GOALS_METRIC_HELP } from '@/lib/goalsMetricHelp'
 import type { GoalRecord } from '@/types/goals'
 import {
   clearEmployeeGoalsParams,
@@ -27,6 +29,43 @@ function uniqueGoalField(
   return [...values].sort((a, b) => a.localeCompare(b))
 }
 
+function summarizeGoalRows(rows: GoalRecord[]) {
+  const goalStatuses = new Map<string, { hasDraft: boolean; hasSubmitted: boolean }>()
+  const owners = new Set<string>()
+
+  for (const goal of rows) {
+    const goalId = goal.goal_id?.trim() || goal.id
+    if (goalId) {
+      const status = (goal.approval_status ?? '').toLowerCase()
+      const entry = goalStatuses.get(goalId) ?? { hasDraft: false, hasSubmitted: false }
+      if (status === 'draft') entry.hasDraft = true
+      else if (status) entry.hasSubmitted = true
+      goalStatuses.set(goalId, entry)
+    }
+
+    const owner =
+      goal.owner?.trim().toLowerCase() ??
+      goal.employee_name?.trim().toLowerCase() ??
+      goal.owner_full_name?.trim().toLowerCase()
+    if (owner) owners.add(owner)
+  }
+
+  let submittedGoals = 0
+  let draftGoals = 0
+  for (const entry of goalStatuses.values()) {
+    if (entry.hasSubmitted) submittedGoals += 1
+    else if (entry.hasDraft) draftGoals += 1
+  }
+
+  return {
+    metricRows: rows.length,
+    uniqueGoals: goalStatuses.size,
+    submittedGoals,
+    draftGoals,
+    people: owners.size,
+  }
+}
+
 export default function GoalsPage() {
   const { goals, dataset, loading, uploading, error, uploadCsv, reload } = useGoalsData()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -34,13 +73,17 @@ export default function GoalsPage() {
     employee: employeeFilter,
     owner: ownerFilter,
     search: searchFromUrl,
+    cycle: cycleFromUrl,
   } = readGoalsFilters(searchParams)
   const [search, setSearch] = useState(searchFromUrl ?? '')
 
   useEffect(() => {
     setSearch(searchFromUrl ?? '')
   }, [searchFromUrl])
-  const [cycleFilter, setCycleFilter] = useState('')
+  useEffect(() => {
+    setCycleFilter(cycleFromUrl ?? '')
+  }, [cycleFromUrl])
+  const [cycleFilter, setCycleFilter] = useState(cycleFromUrl ?? '')
   const [statusFilter, setStatusFilter] = useState('')
   const [approvalFilter, setApprovalFilter] = useState('')
   const [orgUnitFilter, setOrgUnitFilter] = useState('')
@@ -77,7 +120,7 @@ export default function GoalsPage() {
     return goals.filter((g) => {
       if (employeeFilter && g.employee_id !== employeeFilter) return false
       if (ownerKey && g.owner?.trim().toLowerCase() !== ownerKey) return false
-      if (cycleFilter && goalReviewCycle(g) !== cycleFilter) return false
+      if (cycleFilter && !goalMatchesReviewCycle(g, cycleFilter)) return false
       if (statusFilter && (g.status ?? '').toLowerCase() !== statusFilter.toLowerCase()) return false
       if (
         approvalFilter &&
@@ -106,6 +149,8 @@ export default function GoalsPage() {
       return haystack.includes(q)
     })
   }, [goals, search, cycleFilter, statusFilter, approvalFilter, orgUnitFilter, employeeFilter, ownerFilter])
+
+  const goalStats = useMemo(() => summarizeGoalRows(filtered), [filtered])
 
   const clearFilters = () => {
     setSearch('')
@@ -264,6 +309,42 @@ export default function GoalsPage() {
               Clear filters
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {goals.length > 0 ? (
+        <div className="pd-stat-grid pd-stat-grid--wrap" style={{ marginBottom: '1rem' }}>
+          <StatCard
+            label="Metric rows"
+            value={goalStats.metricRows}
+            hint={hasActiveFilters ? 'Matching current filters' : 'CSV export rows'}
+            labelHelp={GOALS_METRIC_HELP.metricRows}
+          />
+          <StatCard
+            label="Unique goals"
+            value={goalStats.uniqueGoals}
+            hint="Rolled up by Goal ID"
+            labelHelp={GOALS_METRIC_HELP.uniqueGoals}
+          />
+          <StatCard
+            label="Submitted goals"
+            value={goalStats.submittedGoals}
+            accent="success"
+            hint={`${goalStats.people.toLocaleString()} ${goalStats.people === 1 ? 'person' : 'people'}`}
+            labelHelp={GOALS_METRIC_HELP.submittedGoalsExport}
+          />
+          <StatCard
+            label="Draft goals"
+            value={goalStats.draftGoals}
+            accent="warning"
+            labelHelp={GOALS_METRIC_HELP.draftGoalsExport}
+          />
+          <StatCard
+            label="People"
+            value={goalStats.people}
+            hint="Distinct owners in scope"
+            labelHelp={GOALS_METRIC_HELP.peopleWithGoals}
+          />
         </div>
       ) : null}
 
