@@ -85,9 +85,13 @@ export async function savePermissionsConfig(config, validationOptions = {}) {
 /** Seed Supabase from permissions.json when table is empty. */
 export async function seedPermissionsConfigIfEmpty() {
   if (!isSupabaseConfigured()) return
-  const existing = await readSupabaseConfig()
-  if (existing) return
-  const fileConfig = await readFileConfig()
-  await savePermissionsConfig(fileConfig)
-  console.log('[permissions] Seeded dashboard_permissions_config from permissions.json')
+  try {
+    const existing = await readSupabaseConfig()
+    if (existing) return
+    const fileConfig = await readFileConfig()
+    await savePermissionsConfig(fileConfig)
+    console.log('[permissions] Seeded dashboard_permissions_config from permissions.json')
+  } catch (err) {
+    console.warn('[permissions] Supabase seed skipped:', err.message)
+  }
 }

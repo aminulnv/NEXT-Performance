@@ -864,6 +864,7 @@ export default function MonitoringPage() {
                 label="Pending submission"
                 count={counts.pendingSubmission.count}
                 pct={counts.pendingSubmission.pct}
+                hint="People"
                 accent="warning"
                 labelHelp={GOALS_METRIC_HELP.pendingSubmission}
               />
@@ -871,6 +872,7 @@ export default function MonitoringPage() {
                 label="Awaiting approval"
                 count={counts.awaitingApproval.count}
                 pct={counts.awaitingApproval.pct}
+                hint="People"
                 accent="info"
                 labelHelp={GOALS_METRIC_HELP.awaitingApproval}
               />
@@ -879,6 +881,7 @@ export default function MonitoringPage() {
                 count={counts.approvedLocked.count}
                 pct={counts.approvedLocked.pct}
                 showProgress
+                hint="People"
                 accent="success"
                 labelHelp={GOALS_METRIC_HELP.approvedLocked}
               />
@@ -887,6 +890,7 @@ export default function MonitoringPage() {
                   label="Overdue (Day 30+)"
                   count={counts.overdueDay30NotApproved.count}
                   pct={counts.overdueDay30NotApproved.pct}
+                  hint="People"
                   accent="danger"
                   labelHelp={GOALS_METRIC_HELP.overdueDay30}
                 />
