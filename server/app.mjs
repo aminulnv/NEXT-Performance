@@ -33,7 +33,7 @@ import {
   roleHasPage,
 } from './permissions.mjs'
 import { fetchRevolutEmployeesList } from './revolutEmployees.mjs'
-import { accessStorageBackend } from './accessStore.mjs'
+import { accessStorageBackend, initAccessStore } from './accessStore.mjs'
 import {
   isEmployeesSupabaseEnabled,
   loadEmployeesFromSupabase,
@@ -356,6 +356,7 @@ function verifyCronSecret(req, res) {
 
 const ready = initPermissionsConfig()
   .then(() => seedPermissionsConfigIfEmpty())
+  .then(() => initAccessStore())
   .then(() => {
     if (requiresSupabaseStorage() && !isSupabaseConfigured()) {
       console.warn(

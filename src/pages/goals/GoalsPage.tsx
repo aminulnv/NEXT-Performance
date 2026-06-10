@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useGoalsData } from '@/hooks/useGoalsData'
+import { usePerformanceData } from '@/hooks/usePerformanceData'
+import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { GoalsCsvUpload } from '@/components/goals/GoalsCsvUpload'
+import { GoalSubmissionStatGrid } from '@/components/goals/GoalSubmissionStatGrid'
 import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
 import { formatGoalStatusLabel, GoalStatusChip } from '@/components/goals/GoalStatusChip'
-import { StatCard } from '@/components/performance/StatCard'
-import { goalMatchesReviewCycle, goalReviewCycle } from '@/lib/goalsMonitoring'
-import { GOALS_METRIC_HELP } from '@/lib/goalsMetricHelp'
+import { FilterMultiSelect } from '@/components/performance/FilterMultiSelect'
+import { filterActiveEmployees } from '@/lib/activeEmployees'
+import { parseQuarterYearFromCycle } from '@/lib/calendarQuarters'
+import {
+  buildGoalOwnerProfileLookup,
+  enrichGoalOwnerProfileLookup,
+} from '@/lib/goalOwnerProfiles'
+import {
+  buildGoalsMonitoringSummary,
+  goalMatchesReviewCycle,
+  goalReviewCycle,
+} from '@/lib/goalsMonitoring'
 import type { GoalRecord } from '@/types/goals'
 import {
   clearEmployeeGoalsParams,
@@ -16,6 +28,21 @@ import {
 } from '@/lib/goalsFilters'
 import { routes } from '@/lib/routes'
 import '@/styles/performance.css'
+
+const DEFAULT_CYCLE_FILTER = 'Q2 2026'
+const DEFAULT_APPROVAL_STATUS_KEYS = ['approved', 'pending'] as const
+
+function resolveDefaultApprovalFilter(statuses: string[]): string[] {
+  return DEFAULT_APPROVAL_STATUS_KEYS.map((key) =>
+    statuses.find((status) => status.toLowerCase() === key),
+  ).filter((status): status is string => Boolean(status))
+}
+
+function approvalFiltersMatch(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  const normalized = new Set(left.map((value) => value.toLowerCase()))
+  return right.every((value) => normalized.has(value.toLowerCase()))
+}
 
 function uniqueGoalField(
   goals: GoalRecord[],
@@ -29,45 +56,13 @@ function uniqueGoalField(
   return [...values].sort((a, b) => a.localeCompare(b))
 }
 
-function summarizeGoalRows(rows: GoalRecord[]) {
-  const goalStatuses = new Map<string, { hasDraft: boolean; hasSubmitted: boolean }>()
-  const owners = new Set<string>()
-
-  for (const goal of rows) {
-    const goalId = goal.goal_id?.trim() || goal.id
-    if (goalId) {
-      const status = (goal.approval_status ?? '').toLowerCase()
-      const entry = goalStatuses.get(goalId) ?? { hasDraft: false, hasSubmitted: false }
-      if (status === 'draft') entry.hasDraft = true
-      else if (status) entry.hasSubmitted = true
-      goalStatuses.set(goalId, entry)
-    }
-
-    const owner =
-      goal.owner?.trim().toLowerCase() ??
-      goal.employee_name?.trim().toLowerCase() ??
-      goal.owner_full_name?.trim().toLowerCase()
-    if (owner) owners.add(owner)
-  }
-
-  let submittedGoals = 0
-  let draftGoals = 0
-  for (const entry of goalStatuses.values()) {
-    if (entry.hasSubmitted) submittedGoals += 1
-    else if (entry.hasDraft) draftGoals += 1
-  }
-
-  return {
-    metricRows: rows.length,
-    uniqueGoals: goalStatuses.size,
-    submittedGoals,
-    draftGoals,
-    people: owners.size,
-  }
-}
-
 export default function GoalsPage() {
   const { goals, dataset, loading, uploading, error, uploadCsv, reload } = useGoalsData()
+  const { records, loading: perfLoading } = usePerformanceData()
+  const {
+    employees: directoryEmployees,
+    loading: employeesLoading,
+  } = useEmployeesDirectory()
   const [searchParams, setSearchParams] = useSearchParams()
   const {
     employee: employeeFilter,
@@ -81,18 +76,27 @@ export default function GoalsPage() {
     setSearch(searchFromUrl ?? '')
   }, [searchFromUrl])
   useEffect(() => {
-    setCycleFilter(cycleFromUrl ?? '')
+    setCycleFilter(cycleFromUrl ?? DEFAULT_CYCLE_FILTER)
   }, [cycleFromUrl])
-  const [cycleFilter, setCycleFilter] = useState(cycleFromUrl ?? '')
+  const [cycleFilter, setCycleFilter] = useState(cycleFromUrl ?? DEFAULT_CYCLE_FILTER)
   const [statusFilter, setStatusFilter] = useState('')
-  const [approvalFilter, setApprovalFilter] = useState('')
+  const [approvalFilter, setApprovalFilter] = useState<string[]>([])
   const [orgUnitFilter, setOrgUnitFilter] = useState('')
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
 
   const cycles = useMemo(() => uniqueGoalField(goals, goalReviewCycle), [goals])
   const statuses = useMemo(() => uniqueGoalField(goals, (g) => g.status), [goals])
   const approvalStatuses = useMemo(() => uniqueGoalField(goals, (g) => g.approval_status), [goals])
+  const defaultApprovalFilter = useMemo(
+    () => resolveDefaultApprovalFilter(approvalStatuses),
+    [approvalStatuses],
+  )
   const orgUnits = useMemo(() => uniqueGoalField(goals, (g) => g.organisation_unit), [goals])
+
+  useEffect(() => {
+    if (approvalStatuses.length === 0 || defaultApprovalFilter.length === 0) return
+    setApprovalFilter((current) => (current.length === 0 ? defaultApprovalFilter : current))
+  }, [approvalStatuses, defaultApprovalFilter])
 
   const employeeFilterLabel = useMemo(() => {
     if (!employeeFilter && !ownerFilter) return null
@@ -104,11 +108,17 @@ export default function GoalsPage() {
     return match?.employee_name ?? match?.owner_full_name ?? match?.owner ?? employeeFilter ?? ownerFilter
   }, [goals, employeeFilter, ownerFilter])
 
+  const isSearchFilterActive = Boolean(search.trim())
+  const isCycleFilterActive = Boolean(cycleFilter)
+  const isStatusFilterActive = Boolean(statusFilter)
+  const isApprovalFilterActive = approvalFilter.length > 0
+  const isOrgUnitFilterActive = Boolean(orgUnitFilter)
+
   const hasActiveFilters = Boolean(
     search.trim() ||
-      cycleFilter ||
+      (cycleFilter && cycleFilter !== DEFAULT_CYCLE_FILTER) ||
       statusFilter ||
-      approvalFilter ||
+      (approvalFilter.length > 0 && !approvalFiltersMatch(approvalFilter, defaultApprovalFilter)) ||
       orgUnitFilter ||
       employeeFilter ||
       ownerFilter,
@@ -122,11 +132,11 @@ export default function GoalsPage() {
       if (ownerKey && g.owner?.trim().toLowerCase() !== ownerKey) return false
       if (cycleFilter && !goalMatchesReviewCycle(g, cycleFilter)) return false
       if (statusFilter && (g.status ?? '').toLowerCase() !== statusFilter.toLowerCase()) return false
-      if (
-        approvalFilter &&
-        (g.approval_status ?? '').toLowerCase() !== approvalFilter.toLowerCase()
-      ) {
-        return false
+      if (approvalFilter.length > 0) {
+        const status = (g.approval_status ?? '').toLowerCase()
+        if (!approvalFilter.some((value) => value.toLowerCase() === status)) {
+          return false
+        }
       }
       if (orgUnitFilter && (g.organisation_unit ?? '') !== orgUnitFilter) return false
       if (!q) return true
@@ -150,13 +160,63 @@ export default function GoalsPage() {
     })
   }, [goals, search, cycleFilter, statusFilter, approvalFilter, orgUnitFilter, employeeFilter, ownerFilter])
 
-  const goalStats = useMemo(() => summarizeGoalRows(filtered), [filtered])
+  const activeRoster = useMemo(
+    () => filterActiveEmployees(directoryEmployees),
+    [directoryEmployees],
+  )
+
+  const ownerProfileLookup = useMemo(
+    () =>
+      enrichGoalOwnerProfileLookup(
+        buildGoalOwnerProfileLookup(records),
+        directoryEmployees,
+      ),
+    [records, directoryEmployees],
+  )
+
+  const monitoringQuarter = useMemo(
+    () => parseQuarterYearFromCycle(cycleFilter),
+    [cycleFilter],
+  )
+
+  const goalsSummary = useMemo(
+    () =>
+      buildGoalsMonitoringSummary(goals, {
+        cycleFilter: cycleFilter || null,
+        calendarQuarter: monitoringQuarter?.quarter ?? null,
+        calendarYear: monitoringQuarter?.year ?? null,
+        performanceRecords: records,
+        ownerProfileLookup,
+        activeRoster,
+      }),
+    [
+      goals,
+      records,
+      cycleFilter,
+      monitoringQuarter,
+      ownerProfileLookup,
+      activeRoster,
+    ],
+  )
+
+  const exportStats = useMemo(() => {
+    const cycleGoals = cycleFilter
+      ? goals.filter((goal) => goalMatchesReviewCycle(goal, cycleFilter))
+      : goals
+    const uniqueGoalIds = new Set(
+      cycleGoals.map((goal) => goal.goal_id?.trim() || goal.id).filter(Boolean),
+    )
+    return {
+      metricRows: cycleGoals.length,
+      uniqueGoals: uniqueGoalIds.size,
+    }
+  }, [goals, cycleFilter])
 
   const clearFilters = () => {
     setSearch('')
-    setCycleFilter('')
+    setCycleFilter(DEFAULT_CYCLE_FILTER)
     setStatusFilter('')
-    setApprovalFilter('')
+    setApprovalFilter(defaultApprovalFilter)
     setOrgUnitFilter('')
     if (employeeFilter || ownerFilter) {
       setSearchParams(clearEmployeeGoalsParams(searchParams), { replace: true })
@@ -182,7 +242,7 @@ export default function GoalsPage() {
     }
   }
 
-  if (loading) return <LoadingState />
+  if (loading || perfLoading || employeesLoading) return <LoadingState />
 
   return (
     <div className="pd-page">
@@ -226,7 +286,7 @@ export default function GoalsPage() {
             </label>
             <input
               id="goals-search"
-              className="pd-input"
+              className={`pd-input${isSearchFilterActive ? ' pd-filter-control--active' : ''}`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Employee, cycle, title, status…"
@@ -238,7 +298,7 @@ export default function GoalsPage() {
             </label>
             <select
               id="goals-cycle"
-              className="pd-select"
+              className={`pd-select${isCycleFilterActive ? ' pd-filter-control--active' : ''}`}
               value={cycleFilter}
               onChange={(e) => setCycleFilter(e.target.value)}
             >
@@ -256,7 +316,7 @@ export default function GoalsPage() {
             </label>
             <select
               id="goals-status"
-              className="pd-select"
+              className={`pd-select${isStatusFilterActive ? ' pd-filter-control--active' : ''}`}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -268,31 +328,25 @@ export default function GoalsPage() {
               ))}
             </select>
           </div>
-          <div className="pd-form-row">
-            <label className="pd-label" htmlFor="goals-approval">
-              Approval
-            </label>
-            <select
-              id="goals-approval"
-              className="pd-select"
-              value={approvalFilter}
-              onChange={(e) => setApprovalFilter(e.target.value)}
-            >
-              <option value="">All</option>
-              {approvalStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {formatGoalStatusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterMultiSelect
+            id="goals-approval"
+            label="Approval Status"
+            placeholder="All statuses"
+            options={approvalStatuses.map((status) => ({
+              value: status,
+              label: formatGoalStatusLabel(status),
+            }))}
+            selected={approvalFilter}
+            onChange={setApprovalFilter}
+            active={isApprovalFilterActive}
+          />
           <div className="pd-form-row">
             <label className="pd-label" htmlFor="goals-org-unit">
               Organisation unit
             </label>
             <select
               id="goals-org-unit"
-              className="pd-select"
+              className={`pd-select${isOrgUnitFilterActive ? ' pd-filter-control--active' : ''}`}
               value={orgUnitFilter}
               onChange={(e) => setOrgUnitFilter(e.target.value)}
             >
@@ -312,39 +366,9 @@ export default function GoalsPage() {
         </div>
       ) : null}
 
-      {goals.length > 0 ? (
-        <div className="pd-stat-grid pd-stat-grid--wrap" style={{ marginBottom: '1rem' }}>
-          <StatCard
-            label="Metric rows"
-            value={goalStats.metricRows}
-            hint={hasActiveFilters ? 'Matching current filters' : 'CSV export rows'}
-            labelHelp={GOALS_METRIC_HELP.metricRows}
-          />
-          <StatCard
-            label="Unique goals"
-            value={goalStats.uniqueGoals}
-            hint="Rolled up by Goal ID"
-            labelHelp={GOALS_METRIC_HELP.uniqueGoals}
-          />
-          <StatCard
-            label="Submitted goals"
-            value={goalStats.submittedGoals}
-            accent="success"
-            hint={`${goalStats.people.toLocaleString()} ${goalStats.people === 1 ? 'person' : 'people'}`}
-            labelHelp={GOALS_METRIC_HELP.submittedGoalsExport}
-          />
-          <StatCard
-            label="Draft goals"
-            value={goalStats.draftGoals}
-            accent="warning"
-            labelHelp={GOALS_METRIC_HELP.draftGoalsExport}
-          />
-          <StatCard
-            label="People"
-            value={goalStats.people}
-            hint="Distinct owners in scope"
-            labelHelp={GOALS_METRIC_HELP.peopleWithGoals}
-          />
+      {goals.length > 0 && activeRoster.length > 0 ? (
+        <div style={{ marginBottom: '1rem' }}>
+          <GoalSubmissionStatGrid goalsSummary={goalsSummary} exportStats={exportStats} />
         </div>
       ) : null}
 

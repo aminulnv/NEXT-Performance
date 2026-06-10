@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGoalsData } from '@/hooks/useGoalsData'
 import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
@@ -22,6 +22,7 @@ import {
   type CalendarQuarter,
 } from '@/lib/calendarQuarters'
 import { CheckInCompletionPanel } from '@/components/goals/CheckInCompletionPanel'
+import { GoalSubmissionStatGrid } from '@/components/goals/GoalSubmissionStatGrid'
 import {
   buildCheckInCompletionSummary,
   buildGoalsMonitoringSummary,
@@ -47,6 +48,18 @@ import '@/styles/performance.css'
 
 function rowGoalsPath(row: FlagPersonRow): string | null {
   return personGoalsSearchUrl(row.name)
+}
+
+function filterFlagPersonRows(rows: FlagPersonRow[], query: string): FlagPersonRow[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return rows
+  return rows.filter((row) => {
+    const hay = [row.name, row.department, row.managerName, row.employeeId]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return hay.includes(q)
+  })
 }
 
 function PersonWithAvatar({
@@ -120,9 +133,11 @@ function NotSubmittedByDayPanel({
   rows: FlagPersonRow[]
 }) {
   const navigate = useNavigate()
+  const searchInputId = useId()
   const [dayThreshold, setDayThreshold] = useState<SubmissionDayThreshold>(() =>
     defaultSubmissionDayThreshold(quarterDay),
   )
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     setDayThreshold(defaultSubmissionDayThreshold(quarterDay))
@@ -130,9 +145,14 @@ function NotSubmittedByDayPanel({
 
   const pastThreshold = quarterDay != null && quarterDay >= dayThreshold
   const listTitle = `Not submitted by Day ${dayThreshold}`
+  const filteredRows = useMemo(() => filterFlagPersonRows(rows, search), [rows, search])
+  const searchActive = search.trim().length > 0
 
   return (
-    <Panel title="Not submitted by day" count={pastThreshold ? rows.length : undefined}>
+    <Panel
+      title="Not submitted by day"
+      count={pastThreshold ? (searchActive ? filteredRows.length : rows.length) : undefined}
+    >
       {!quarterSelected ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           Select a calendar quarter to track Day 10, 15, and 30 submission deadlines.
@@ -177,6 +197,25 @@ function NotSubmittedByDayPanel({
               No one missing submission by Day {dayThreshold}.
             </p>
           ) : (
+            <>
+              <div className="pd-flag-panel-search">
+                <label className="pd-sr-only" htmlFor={searchInputId}>
+                  Search {listTitle}
+                </label>
+                <input
+                  id={searchInputId}
+                  className="pd-input"
+                  type="search"
+                  placeholder="Search name, department, manager…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              {filteredRows.length === 0 ? (
+                <p className="pd-page-subtitle" style={{ margin: 0 }}>
+                  No matches for your search.
+                </p>
+              ) : (
             <ScrollableTableViewport label={listTitle}>
               <table className="pd-flag-people-table pd-flag-people-table--auto-cols">
                 <colgroup>
@@ -194,7 +233,7 @@ function NotSubmittedByDayPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => {
+                  {filteredRows.map((row) => {
                     const detailPath = rowGoalsPath(row)
                     return (
                       <tr
@@ -229,6 +268,8 @@ function NotSubmittedByDayPanel({
                 </tbody>
               </table>
             </ScrollableTableViewport>
+              )}
+            </>
           )}
         </>
       )}
@@ -256,15 +297,38 @@ function FlagPanel({
   showOldestPendingDays?: boolean
 }) {
   const navigate = useNavigate()
+  const searchInputId = useId()
+  const [search, setSearch] = useState('')
   const autoColumns = showManagerName || showSubmittedGoalCount
+  const filteredRows = useMemo(() => filterFlagPersonRows(rows, search), [rows, search])
+  const searchActive = search.trim().length > 0
 
   return (
-    <Panel title={title} count={rows.length}>
+    <Panel title={title} count={searchActive ? filteredRows.length : rows.length}>
       {rows.length === 0 ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           {emptyText}
         </p>
       ) : (
+        <>
+          <div className="pd-flag-panel-search">
+            <label className="pd-sr-only" htmlFor={searchInputId}>
+              Search {title}
+            </label>
+            <input
+              id={searchInputId}
+              className="pd-input"
+              type="search"
+              placeholder="Search name, department, manager…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {filteredRows.length === 0 ? (
+            <p className="pd-page-subtitle" style={{ margin: 0 }}>
+              No matches for your search.
+            </p>
+          ) : (
         <ScrollableTableViewport label={title}>
           <table
             className={`pd-flag-people-table${
@@ -299,7 +363,7 @@ function FlagPanel({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {filteredRows.map((row) => {
                 const detailPath = rowGoalsPath(row)
                 return (
                   <tr
@@ -352,6 +416,8 @@ function FlagPanel({
             </tbody>
           </table>
         </ScrollableTableViewport>
+          )}
+        </>
       )}
     </Panel>
   )
@@ -638,7 +704,6 @@ export default function MonitoringPage() {
     [goalsSummary.managerCompliance.managersPendingOver5Days, ownerProfileLookup],
   )
 
-  const counts = goalsSummary.submissionCounts
   const managerCompliance = goalsSummary.managerCompliance
 
   const exportStats = useMemo(() => {
@@ -844,63 +909,7 @@ export default function MonitoringPage() {
               ) : null
             }
           >
-            <div className="pd-stat-grid">
-              <StatCard
-                label="Total employees"
-                value={goalsSummary.totalOwners}
-                hint="Active · People directory"
-                labelHelp={GOALS_METRIC_HELP.totalEmployees}
-              />
-              <StatCard
-                label="Goals submitted"
-                count={counts.submitted.goalCount}
-                pct={counts.submitted.pct}
-                showProgress
-                hint={`${counts.submitted.count.toLocaleString()} ${counts.submitted.count === 1 ? 'person' : 'people'} · ${exportStats.metricRows.toLocaleString()} metrics · ${exportStats.uniqueGoals.toLocaleString()} goals in export`}
-                accent="success"
-                labelHelp={GOALS_METRIC_HELP.submissionRate}
-              />
-              <StatCard
-                label="Pending submission"
-                count={counts.pendingSubmission.count}
-                pct={counts.pendingSubmission.pct}
-                hint="People"
-                accent="warning"
-                labelHelp={GOALS_METRIC_HELP.pendingSubmission}
-              />
-              <StatCard
-                label="Awaiting approval"
-                count={counts.awaitingApproval.count}
-                pct={counts.awaitingApproval.pct}
-                hint="People"
-                accent="info"
-                labelHelp={GOALS_METRIC_HELP.awaitingApproval}
-              />
-              <StatCard
-                label="Approved & locked"
-                count={counts.approvedLocked.count}
-                pct={counts.approvedLocked.pct}
-                showProgress
-                hint="People"
-                accent="success"
-                labelHelp={GOALS_METRIC_HELP.approvedLocked}
-              />
-              {goalsSummary.quarterDay != null && goalsSummary.quarterDay >= 30 && (
-                <StatCard
-                  label="Overdue (Day 30+)"
-                  count={counts.overdueDay30NotApproved.count}
-                  pct={counts.overdueDay30NotApproved.pct}
-                  hint="People"
-                  accent="danger"
-                  labelHelp={GOALS_METRIC_HELP.overdueDay30}
-                />
-              )}
-              <StatCard
-                label="Progress update rate"
-                pct={goalsSummary.progressUpdateRatePct}
-                labelHelp={GOALS_METRIC_HELP.progressUpdateRate}
-              />
-            </div>
+            <GoalSubmissionStatGrid goalsSummary={goalsSummary} exportStats={exportStats} />
 
             <FlagPanelGrid>
               <FlagPanel

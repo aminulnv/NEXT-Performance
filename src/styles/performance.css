@@ -529,6 +529,14 @@
   padding: 0.1rem 0.4rem;
 }
 
+.pd-flag-panel-search {
+  margin-bottom: 0.75rem;
+}
+
+.pd-flag-panel-search .pd-input {
+  width: 100%;
+}
+
 .pd-flag-panel-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -951,6 +959,88 @@
   border: 1px solid #d1d5db;
   border-radius: 8px;
   background: #fff;
+}
+
+.pd-input.pd-filter-control--active,
+.pd-select.pd-filter-control--active,
+.pd-multi-select__trigger.pd-filter-control--active {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 1px #dc2626;
+}
+
+.pd-multi-select {
+  position: relative;
+}
+
+.pd-multi-select__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  text-align: left;
+  color: inherit;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pd-multi-select__trigger:hover {
+  border-color: #9ca3af;
+}
+
+.pd-multi-select__trigger:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.pd-multi-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-multi-select__chevron {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.pd-multi-select__menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  max-height: 12rem;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.pd-multi-select__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.pd-multi-select__option:hover {
+  background: #f9fafb;
+}
+
+.pd-multi-select__option input {
+  margin: 0;
 }
 
 .pd-label {

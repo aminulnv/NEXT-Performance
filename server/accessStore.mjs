@@ -9,15 +9,72 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ACCESS_FILE = path.join(__dirname, 'data', 'access.json')
 
 let supabaseStore = null
+/** @type {'supabase' | 'file' | null} */
+let activeBackend = null
+
+function isSupabaseNetworkError(err) {
+  const message = err instanceof Error ? err.message : String(err)
+  const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
+  const haystack = `${message} ${cause}`.toLowerCase()
+  return (
+    haystack.includes('fetch failed') ||
+    haystack.includes('econnrefused') ||
+    haystack.includes('enotfound') ||
+    haystack.includes('etimedout') ||
+    haystack.includes('self_signed_cert')
+  )
+}
+
+async function probeSupabase() {
+  const store = await import('./accessStoreSupabase.mjs')
+  await store.getUserAccess('__healthcheck__@invalid')
+  return store
+}
+
+export async function initAccessStore() {
+  if (!isSupabaseConfigured()) {
+    activeBackend = 'file'
+    return
+  }
+  try {
+    supabaseStore = await probeSupabase()
+    activeBackend = 'supabase'
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn('[access] Supabase unreachable, using access.json:', message)
+    activeBackend = 'file'
+    supabaseStore = null
+  }
+}
 
 async function getStore() {
-  if (isSupabaseConfigured()) {
-    if (!supabaseStore) {
-      supabaseStore = await import('./accessStoreSupabase.mjs')
-    }
-    return supabaseStore
+  if (activeBackend == null) {
+    await initAccessStore()
   }
-  return fileStore
+  if (activeBackend === 'file' || !isSupabaseConfigured()) {
+    return fileStore
+  }
+  if (!supabaseStore) {
+    supabaseStore = await import('./accessStoreSupabase.mjs')
+  }
+  return supabaseStore
+}
+
+async function withSupabaseFallback(operation, fileOperation) {
+  const store = await getStore()
+  if (store === fileStore) {
+    return fileOperation()
+  }
+  try {
+    return await operation(store)
+  } catch (err) {
+    if (!isSupabaseNetworkError(err)) throw err
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn('[access] Supabase request failed, using access.json:', message)
+    activeBackend = 'file'
+    supabaseStore = null
+    return fileOperation()
+  }
 }
 
 const fileStore = {
@@ -44,32 +101,39 @@ const fileStore = {
 }
 
 export function accessStorageBackend() {
+  if (activeBackend) return activeBackend
   return isSupabaseConfigured() ? 'supabase' : 'file'
 }
 
+async function listUsersFromFile() {
+  const data = await fileStore.readAccessFile()
+  return Object.entries(data.users).map(([email, entry]) => ({
+    email,
+    role: entry.role,
+    name: entry.name ?? null,
+    employeeId: entry.employeeId ?? null,
+    addedAt: entry.addedAt ?? null,
+  }))
+}
+
+async function getUserAccessFromFile(email) {
+  const key = email.toLowerCase()
+  const data = await fileStore.readAccessFile()
+  return data.users[key] ?? null
+}
+
 export async function listUsers() {
-  const store = await getStore()
-  if (store === fileStore) {
-    const data = await fileStore.readAccessFile()
-    return Object.entries(data.users).map(([email, entry]) => ({
-      email,
-      role: entry.role,
-      name: entry.name ?? null,
-      employeeId: entry.employeeId ?? null,
-      addedAt: entry.addedAt ?? null,
-    }))
-  }
-  return store.listUsers()
+  return withSupabaseFallback(
+    (store) => store.listUsers(),
+    () => listUsersFromFile(),
+  )
 }
 
 export async function getUserAccess(email) {
-  const store = await getStore()
-  if (store === fileStore) {
-    const key = email.toLowerCase()
-    const data = await fileStore.readAccessFile()
-    return data.users[key] ?? null
-  }
-  return store.getUserAccess(email)
+  return withSupabaseFallback(
+    (store) => store.getUserAccess(email),
+    () => getUserAccessFromFile(email),
+  )
 }
 
 export async function upsertUser(email, { role, name, employeeId }, options = {}) {
@@ -80,8 +144,7 @@ export async function upsertUser(email, { role, name, employeeId }, options = {}
     options,
   )
 
-  const store = await getStore()
-  if (store === fileStore) {
+  async function upsertToFile() {
     if (!isValidRole(enriched.role)) {
       throw new Error(`Invalid role: ${enriched.role}`)
     }
@@ -97,24 +160,30 @@ export async function upsertUser(email, { role, name, employeeId }, options = {}
     await fileStore.writeAccessFile(data)
     return data.users[key]
   }
-  return store.upsertUser(email, {
-    role: enriched.role,
-    name: enriched.name,
-    employeeId: enriched.employeeId,
-  })
+
+  return withSupabaseFallback(
+    (store) =>
+      store.upsertUser(email, {
+        role: enriched.role,
+        name: enriched.name,
+        employeeId: enriched.employeeId,
+      }),
+    upsertToFile,
+  )
 }
 
 export async function removeUser(email) {
-  const store = await getStore()
-  if (store === fileStore) {
-    const key = email.toLowerCase()
-    const data = await fileStore.readAccessFile()
-    if (!data.users[key]) return false
-    delete data.users[key]
-    await fileStore.writeAccessFile(data)
-    return true
-  }
-  return store.removeUser(email)
+  const key = email.toLowerCase()
+  return withSupabaseFallback(
+    (store) => store.removeUser(email),
+    async () => {
+      const data = await fileStore.readAccessFile()
+      if (!data.users[key]) return false
+      delete data.users[key]
+      await fileStore.writeAccessFile(data)
+      return true
+    },
+  )
 }
 
 export function getBootstrapAdmins() {
@@ -126,8 +195,7 @@ export function getBootstrapAdmins() {
 }
 
 export async function bulkUpsertUsers(entries) {
-  const store = await getStore()
-  if (store === fileStore) {
+  async function bulkUpsertToFile() {
     const data = await fileStore.readAccessFile()
     let added = 0
     let updated = 0
@@ -153,7 +221,11 @@ export async function bulkUpsertUsers(entries) {
     await fileStore.writeAccessFile(data)
     return { added, updated, total: entries.length }
   }
-  return store.bulkUpsertUsers(entries)
+
+  return withSupabaseFallback(
+    (store) => store.bulkUpsertUsers(entries),
+    bulkUpsertToFile,
+  )
 }
 
 export async function resolveUserRole(email, profileName) {
