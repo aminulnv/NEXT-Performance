@@ -2,6 +2,8 @@ import { OAuth2Client } from 'google-auth-library'
 import { resolveUserRole, getUserAccess } from './accessStore.mjs'
 import { loadPermissionsConfig, roleHasPage } from './permissions.mjs'
 import { normalizeScopedDepartments } from './departmentScope.mjs'
+import { authRateLimit } from './rateLimit.mjs'
+import { audit } from './auditLog.mjs'
 
 function isLocalhostUrl(url) {
   return /localhost|127\.0\.0\.1/i.test(url ?? '')
@@ -88,8 +90,70 @@ function allowedDomain() {
   return (process.env.ALLOWED_EMAIL_DOMAIN || '').trim().toLowerCase()
 }
 
-export function isAuthEnabled() {
-  return process.env.VITE_BYPASS_AUTH !== 'true' && process.env.AUTH_DISABLED !== 'true'
+export const MIN_SESSION_SECRET_LENGTH = 16
+
+/** Production runtime — Vercel sets VERCEL even when NODE_ENV is unset locally. */
+export function isProductionRuntime(env = process.env) {
+  return env.NODE_ENV === 'production' || Boolean(env.VERCEL)
+}
+
+export function isAuthBypassRequested(env = process.env) {
+  return env.VITE_BYPASS_AUTH === 'true' || env.AUTH_DISABLED === 'true'
+}
+
+/** Auth bypass is dev-only; production always requires login. */
+export function isAuthEnabled(env = process.env) {
+  if (isProductionRuntime(env)) return true
+  return !isAuthBypassRequested(env)
+}
+
+export function resolveSessionSecret(env = process.env) {
+  const secret = env.SESSION_SECRET?.trim()
+  if (isProductionRuntime(env)) {
+    if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
+      throw new Error(
+        `[auth] SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters in production`,
+      )
+    }
+    return secret
+  }
+  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
+    console.warn(
+      `[auth] WARNING: Set SESSION_SECRET (min ${MIN_SESSION_SECRET_LENGTH} chars) in .env for production sessions`,
+    )
+  }
+  return secret || 'dev-only-change-me-in-production'
+}
+
+/** @returns {{ ok: true } | { ok: false, errors: string[] }} */
+export function validateAuthProductionConfig(env = process.env) {
+  if (!isProductionRuntime(env)) return { ok: true }
+
+  const errors = []
+  if (isAuthBypassRequested(env)) {
+    errors.push(
+      'VITE_BYPASS_AUTH and AUTH_DISABLED must not be set in production — remove them from deploy env vars',
+    )
+  }
+  const secret = env.SESSION_SECRET?.trim()
+  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
+    errors.push(
+      `SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters in production`,
+    )
+  }
+  if (!env.GOOGLE_CLIENT_ID?.trim() || !env.GOOGLE_CLIENT_SECRET?.trim()) {
+    errors.push('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required in production')
+  }
+  return errors.length ? { ok: false, errors } : { ok: true }
+}
+
+export function assertAuthProductionSafe() {
+  const result = validateAuthProductionConfig()
+  if (result.ok) return
+  for (const message of result.errors) {
+    console.error(`[auth] FATAL: ${message}`)
+  }
+  process.exit(1)
 }
 
 export function attachSessionUser(session, { email, name, picture, sub, role, employeeId }) {
@@ -121,7 +185,7 @@ async function enrichUserFromAccessStore(user) {
 export function registerAuthRoutes(app) {
   if (!isAuthEnabled()) return
 
-  app.get('/api/auth/google', (req, res) => {
+  app.get('/api/auth/google', authRateLimit, (req, res, next) => {
     try {
       saveReturnTo(req.session, req.query.returnTo)
       const client = getOAuthClient(req)
@@ -132,12 +196,11 @@ export function registerAuthRoutes(app) {
       })
       res.redirect(url)
     } catch (err) {
-      console.error(err)
-      res.status(500).send(err instanceof Error ? err.message : 'Auth not configured')
+      next(err)
     }
   })
 
-  app.get('/api/auth/google/callback', async (req, res) => {
+  app.get('/api/auth/google/callback', authRateLimit, async (req, res) => {
     const code = req.query.code
     if (!code || typeof code !== 'string') {
       return redirectToApp(res, '/login?error=missing_code', req)
@@ -179,6 +242,13 @@ export function registerAuthRoutes(app) {
         employeeId: access.employeeId,
       })
 
+      audit({
+        action: 'auth.login',
+        actorEmail: email,
+        actorRole: access.role,
+        req,
+      })
+
       const redirectTo = typeof req.session.returnTo === 'string' ? req.session.returnTo : '/'
       delete req.session.returnTo
       redirectToApp(res, redirectTo, req)
@@ -214,6 +284,13 @@ export function registerAuthRoutes(app) {
   })
 
   app.post('/api/auth/logout', (req, res) => {
+    const sessionUser = req.session?.user
+    audit({
+      action: 'auth.logout',
+      actorEmail: sessionUser?.email ?? null,
+      actorRole: sessionUser?.role ?? null,
+      req,
+    })
     req.session = null
     res.json({ ok: true })
   })

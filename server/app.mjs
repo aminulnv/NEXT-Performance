@@ -10,7 +10,10 @@ import { importGoalsFromCsv, loadGoalsDataset, goalsStorageBackend } from './goa
 import {
   registerAuthRoutes,
   requireAuth,
+  requireRole,
   isAuthEnabled,
+  assertAuthProductionSafe,
+  resolveSessionSecret,
   validateAppUrlForProduction,
   getDefaultAppOrigin,
 } from './auth.mjs'
@@ -51,55 +54,47 @@ import {
   filterGoalsForUser,
 } from './departmentScope.mjs'
 import { getEmployeesDirectoryFromCache } from './employeeLookup.mjs'
+import {
+  apiRateLimit,
+  csvUploadRateLimit,
+  forceRefreshRateLimit,
+  isRateLimitEnabled,
+} from './rateLimit.mjs'
+import { audit, auditActor } from './auditLog.mjs'
+import {
+  buildCorsAllowlist,
+  createCorsMiddleware,
+  createHelmetMiddleware,
+  publicHealthPayload,
+  isProductionRuntime,
+} from './security.mjs'
+import { asyncHandler, errorHandler, HttpError, toHttpError } from './errors.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distPath = path.join(__dirname, '..', 'dist')
 
+assertAuthProductionSafe()
 validateAppUrlForProduction()
 
 const app = express()
 const CACHE_MS = Number(process.env.API_CACHE_MS) || 60 * 60 * 1000
 const STALE_REFRESH_MS = Number(process.env.STALE_REFRESH_MS) || 6 * 60 * 60 * 1000
 const defaultOrigin = getDefaultAppOrigin()
-
-const corsAllowlist = new Set(
-  [
-    defaultOrigin,
-    'https://next-performance-beta.vercel.app',
-    process.env.APP_URL?.replace(/\/$/, ''),
-    process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/\/$/, ''),
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, '')}` : null,
-  ].filter((origin) => origin && !/localhost|127\.0\.0\.1/i.test(origin)),
-)
+const corsAllowlist = buildCorsAllowlist(process.env, defaultOrigin)
 
 app.set('trust proxy', 1)
+app.disable('x-powered-by')
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true)
-      if (corsAllowlist.has(origin.replace(/\/$/, ''))) return callback(null, true)
-      if (origin.endsWith('.vercel.app')) return callback(null, true)
-      if (process.env.NODE_ENV !== 'production') return callback(null, true)
-      callback(null, false)
-    },
-    credentials: true,
-  }),
-)
+app.use(createHelmetMiddleware())
+app.use(cors(createCorsMiddleware({ allowlist: corsAllowlist })))
 app.use(express.json())
 app.use(express.text({ type: ['text/csv', 'text/plain'], limit: '15mb' }))
 
 if (isAuthEnabled()) {
-  const secret = process.env.SESSION_SECRET
-  if (!secret || secret.length < 16) {
-    console.warn(
-      '[auth] WARNING: Set SESSION_SECRET (min 16 chars) in .env for production sessions',
-    )
-  }
   app.use(
     cookieSession({
       name: 'pd.sid',
-      keys: [secret || 'dev-only-change-me-in-production'],
+      keys: [resolveSessionSecret()],
       maxAge: 7 * 24 * 60 * 60 * 1000,
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
@@ -107,6 +102,8 @@ if (isAuthEnabled()) {
     }),
   )
 }
+
+app.use('/api', apiRateLimit)
 
 registerAuthRoutes(app)
 registerAccessRoutes(app)
@@ -425,6 +422,10 @@ app.use(async (_req, _res, next) => {
 })
 
 app.get('/api/health', (_req, res) => {
+  res.json(publicHealthPayload())
+})
+
+app.get('/api/health/detail', requireAuth, requireRole('admin'), (_req, res) => {
   res.json({
     ok: true,
     platform: getPlatformLabel(),
@@ -439,83 +440,99 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
-app.get('/api/cron/warm-cache', async (req, res) => {
+app.get('/api/cron/warm-cache', asyncHandler(async (req, res) => {
   if (!verifyCronSecret(req, res)) return
-  try {
-    console.log('[cron] Warming performance cache from Revolut…')
-    const data = await buildCacheFromRevolut()
-    await saveCache(data)
-    res.json({
-      ok: true,
+  console.log('[cron] Warming performance cache from Revolut…')
+  const data = await buildCacheFromRevolut()
+  await saveCache(data)
+  audit({
+    action: 'data.cron.warm_cache',
+    actorEmail: 'system',
+    actorRole: 'system',
+    metadata: {
       recordCount: data.recordCount,
       fetchedAt: data.fetchedAt,
-      performanceCache: isPerformanceSupabaseCacheEnabled() ? 'supabase-encrypted' : 'disk',
-    })
-  } catch (err) {
-    console.error('[cron] warm-cache failed:', err)
-    res.status(500).json({
-      error: err instanceof Error ? err.message : 'Cache warm failed',
-    })
-  }
-})
+    },
+    req,
+  })
+  res.json({
+    ok: true,
+    recordCount: data.recordCount,
+    fetchedAt: data.fetchedAt,
+    performanceCache: isPerformanceSupabaseCacheEnabled() ? 'supabase-encrypted' : 'disk',
+  })
+}))
 
-app.get('/api/goals', requireAuth, requireGoalsRead, async (req, res) => {
-  try {
-    const data = await loadGoalsDataset()
-    sendPrivateCache(res)
-    res.json(scopedGoalsPayload(data, req.user))
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({
-      error: err instanceof Error ? err.message : 'Failed to load goals',
-    })
-  }
-})
+app.get('/api/goals', requireAuth, requireGoalsRead, asyncHandler(async (req, res) => {
+  const data = await loadGoalsDataset()
+  sendPrivateCache(res)
+  res.json(scopedGoalsPayload(data, req.user))
+}))
 
-app.post('/api/goals', requireAuth, async (req, res) => {
+app.post('/api/goals', requireAuth, csvUploadRateLimit, asyncHandler(async (req, res) => {
   if (isAuthEnabled() && !canUploadGoals(req.user?.role)) {
     return res.status(403).json({ error: 'Only HR or administrators can upload goals CSV' })
   }
+  const csvText = typeof req.body === 'string' ? req.body : ''
+  if (!csvText.trim()) {
+    return res.status(400).json({ error: 'Request body must be CSV text (Content-Type: text/csv)' })
+  }
+  let data
   try {
-    const csvText = typeof req.body === 'string' ? req.body : ''
-    if (!csvText.trim()) {
-      return res.status(400).json({ error: 'Request body must be CSV text (Content-Type: text/csv)' })
-    }
-    const data = await importGoalsFromCsv(csvText, {
+    data = await importGoalsFromCsv(csvText, {
       importedBy: req.user?.email ?? null,
     })
-    res.json({
-      goals: data.goals,
-      columns: data.columns,
-      columnMap: data.columnMap,
-      importedAt: data.importedAt,
-      source: data.source,
+  } catch (err) {
+    throw new HttpError(
+      400,
+      err instanceof Error ? err.message : 'Failed to parse goals CSV',
+      { expose: true },
+    )
+  }
+  audit({
+    action: 'data.goals.upload',
+    ...auditActor(req),
+    metadata: {
       goalCount: data.goals.length,
       importedBy: data.importedBy ?? null,
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(400).json({
-      error: err instanceof Error ? err.message : 'Failed to parse goals CSV',
-    })
-  }
-})
+    },
+    req,
+  })
+  res.json({
+    goals: data.goals,
+    columns: data.columns,
+    columnMap: data.columnMap,
+    importedAt: data.importedAt,
+    source: data.source,
+    goalCount: data.goals.length,
+    importedBy: data.importedBy ?? null,
+  })
+}))
 
 app.get(
   '/api/performance-records',
   requireAuth,
   requirePerformanceApiAccess,
-  async (req, res) => {
+  forceRefreshRateLimit,
+  asyncHandler(async (req, res) => {
     try {
       const force = req.query.refresh === '1'
       if (force && isAuthEnabled() && !canForceRefresh(req.user?.role)) {
         return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
       }
       const data = await resolveCache({ force })
+      if (force) {
+        audit({
+          action: 'data.force_refresh',
+          ...auditActor(req),
+          target: 'performance-records',
+          metadata: { recordCount: data.recordCount ?? data.records?.length ?? 0 },
+          req,
+        })
+      }
       sendPrivateCache(res)
       res.json(toApiPayload(data, req))
     } catch (err) {
-      console.error(err)
       const disk = isServerless() ? null : await readDiskCache()
       if (disk) {
         const stale = {
@@ -524,125 +541,131 @@ app.get(
           records: disk.records,
           cacheStatus: 'disk-stale',
           refreshing: false,
-          warning: err instanceof Error ? err.message : 'Live refresh failed; showing cached data',
+          warning: isProductionRuntime()
+            ? 'Live refresh failed; showing cached data'
+            : err instanceof Error
+              ? err.message
+              : 'Live refresh failed; showing cached data',
         }
+        sendPrivateCache(res)
         return res.json(toApiPayload(stale, req))
       }
-      res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to load performance data',
-      })
+      throw toHttpError(err, 'Failed to load performance data')
     }
-  },
+  }),
 )
 
 app.get(
   '/api/employees',
   requireAuth,
   requireEmployeesDirectoryAccess,
-  async (req, res) => {
-    try {
-      const force = req.query.refresh === '1'
-      if (force && isAuthEnabled() && !canForceRefresh(req.user?.role)) {
-        return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
-      }
+  forceRefreshRateLimit,
+  asyncHandler(async (req, res) => {
+    const force = req.query.refresh === '1'
+    if (force && isAuthEnabled() && !canForceRefresh(req.user?.role)) {
+      return res.status(403).json({ error: 'Only HR or administrators can force a live refresh' })
+    }
 
-      sendPrivateCache(res)
+    sendPrivateCache(res)
 
-      if (!force && memoryCache?.employeesDirectory?.length) {
-        return res.json(
-          scopedEmployeesPayload(memoryCache.employeesDirectory, req.user, {
-            fetchedAt: memoryCache.fetchedAt,
-            source: memoryCache.cacheStatus ?? 'memory',
-            refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
-          }),
-        )
-      }
+    if (!force && memoryCache?.employeesDirectory?.length) {
+      return res.json(
+        scopedEmployeesPayload(memoryCache.employeesDirectory, req.user, {
+          fetchedAt: memoryCache.fetchedAt,
+          source: memoryCache.cacheStatus ?? 'memory',
+          refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
+        }),
+      )
+    }
 
-      if (!force) {
-        try {
-          const fromSupabase = await loadEmployeesFromSupabase()
-          if (fromSupabase?.employees.length) {
-            if (memoryCache) {
-              memoryCache.employeesDirectory = fromSupabase.employees
-              memoryCache.fetchedAt = fromSupabase.fetchedAt ?? memoryCache.fetchedAt
-            }
-            return res.json(
-              scopedEmployeesPayload(fromSupabase.employees, req.user, {
-                fetchedAt: fromSupabase.fetchedAt,
-                source: fromSupabase.source,
-                refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
-              }),
-            )
+    if (!force) {
+      try {
+        const fromSupabase = await loadEmployeesFromSupabase()
+        if (fromSupabase?.employees.length) {
+          if (memoryCache) {
+            memoryCache.employeesDirectory = fromSupabase.employees
+            memoryCache.fetchedAt = fromSupabase.fetchedAt ?? memoryCache.fetchedAt
           }
-        } catch (err) {
-          console.warn('[employees] Supabase read failed:', err instanceof Error ? err.message : err)
-        }
-      }
-
-      if (!force) {
-        const persisted = await loadPersistedCache()
-        if (persisted?.employeesDirectory?.length) {
-          applyMemoryCache({
-            ...persisted,
-            employeesDirectory: persisted.employeesDirectory,
-          })
           return res.json(
-            scopedEmployeesPayload(persisted.employeesDirectory, req.user, {
-              fetchedAt: persisted.fetchedAt,
-              source: persisted.cacheStatus ?? 'disk',
+            scopedEmployeesPayload(fromSupabase.employees, req.user, {
+              fetchedAt: fromSupabase.fetchedAt,
+              source: fromSupabase.source,
               refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
             }),
           )
         }
+      } catch (err) {
+        console.warn('[employees] Supabase read failed:', err instanceof Error ? err.message : err)
       }
+    }
 
-      if (!force) {
-        startBackgroundEmployeesRefresh()
-        return res.json({
-          employees: [],
-          count: 0,
-          fetchedAt: new Date().toISOString(),
-          source: 'warming',
-          refreshing: true,
-          warning:
-            'Employee directory is syncing from Revolut into Supabase. Reload shortly.',
+    if (!force) {
+      const persisted = await loadPersistedCache()
+      if (persisted?.employeesDirectory?.length) {
+        applyMemoryCache({
+          ...persisted,
+          employeesDirectory: persisted.employeesDirectory,
         })
+        return res.json(
+          scopedEmployeesPayload(persisted.employeesDirectory, req.user, {
+            fetchedAt: persisted.fetchedAt,
+            source: persisted.cacheStatus ?? 'disk',
+            refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
+          }),
+        )
       }
+    }
 
-      const fetched = await fetchRevolutEmployeesList()
-      if (memoryCache) {
-        memoryCache.employeesDirectory = fetched.employeesDirectory
-        memoryCache.employeesByEmail = {
-          ...(memoryCache.employeesByEmail ?? {}),
-          ...fetched.index,
-        }
-        memoryCache.fetchedAt = fetched.fetchedAt
-      } else {
-        memoryCache = {
-          fetchedAt: fetched.fetchedAt,
-          recordCount: 0,
-          records: [],
-          employeesByEmail: fetched.index,
-          employeesDirectory: fetched.employeesDirectory,
-          cacheStatus: 'live-employees',
-        }
-        memoryCacheAt = Date.now()
-      }
-
-      res.json(
-        scopedEmployeesPayload(fetched.employeesDirectory, req.user, {
-          fetchedAt: fetched.fetchedAt,
-          source: 'revolut',
-          refreshing: Boolean(refreshInFlight),
-        }),
-      )
-    } catch (err) {
-      console.error(err)
-      res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to load employees from Revolut',
+    if (!force) {
+      startBackgroundEmployeesRefresh()
+      return res.json({
+        employees: [],
+        count: 0,
+        fetchedAt: new Date().toISOString(),
+        source: 'warming',
+        refreshing: true,
+        warning:
+          'Employee directory is syncing from Revolut into Supabase. Reload shortly.',
       })
     }
-  },
+
+    const fetched = await fetchRevolutEmployeesList()
+    if (force) {
+      audit({
+        action: 'data.force_refresh',
+        ...auditActor(req),
+        target: 'employees',
+        metadata: { employeeCount: fetched.employeesDirectory?.length ?? 0 },
+        req,
+      })
+    }
+    if (memoryCache) {
+      memoryCache.employeesDirectory = fetched.employeesDirectory
+      memoryCache.employeesByEmail = {
+        ...(memoryCache.employeesByEmail ?? {}),
+        ...fetched.index,
+      }
+      memoryCache.fetchedAt = fetched.fetchedAt
+    } else {
+      memoryCache = {
+        fetchedAt: fetched.fetchedAt,
+        recordCount: 0,
+        records: [],
+        employeesByEmail: fetched.index,
+        employeesDirectory: fetched.employeesDirectory,
+        cacheStatus: 'live-employees',
+      }
+      memoryCacheAt = Date.now()
+    }
+
+    res.json(
+      scopedEmployeesPayload(fetched.employeesDirectory, req.user, {
+        fetchedAt: fetched.fetchedAt,
+        source: 'revolut',
+        refreshing: Boolean(refreshInFlight),
+      }),
+    )
+  }),
 )
 
 if (!isServerless() && fs.existsSync(distPath)) {
@@ -652,6 +675,12 @@ if (!isServerless() && fs.existsSync(distPath)) {
     res.sendFile(path.join(distPath, 'index.html'))
   })
 }
+
+app.use('/api', (req, res, next) => {
+  next(new HttpError(404, 'Not found', { expose: true }))
+})
+
+app.use(errorHandler)
 
 export function logStartupHints() {
   if (isAuthEnabled()) {
@@ -666,8 +695,12 @@ export function logStartupHints() {
   console.log(`[access] Storage: ${accessStorageBackend()}`)
   console.log(`[permissions] Storage: ${getPermissionsCacheMeta().source}`)
   console.log(`[runtime] Platform: ${getPlatformLabel()}`)
+  if (isRateLimitEnabled()) {
+    console.log('[rate-limit] Enabled on /api (auth, CSV upload, force refresh)')
+  }
   if (isSupabaseConfigured()) {
     console.log('[supabase] User access → dashboard_users table')
+    console.log('[audit] Events → audit_log table')
   }
   if (isPerformanceSupabaseCacheEnabled()) {
     console.log('[cache] Encrypted performance snapshot → performance_encrypted_cache')
