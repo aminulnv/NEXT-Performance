@@ -1,5 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ChevronDown, X } from 'lucide-react'
+import {
+  ALL_DEPARTMENTS_LABEL,
+  ALL_DEPARTMENTS_SCOPE,
+  departmentScopeLabel,
+} from '@/lib/departmentScope'
 
 type DepartmentMultiSelectProps = {
   id: string
@@ -9,6 +14,7 @@ type DepartmentMultiSelectProps = {
   disabled?: boolean
   placeholder?: string
   emptyHint?: string
+  includeAllDepartmentsOption?: boolean
 }
 
 function filterDepartments(departments: string[], query: string): string[] {
@@ -25,6 +31,7 @@ export function DepartmentMultiSelect({
   disabled = false,
   placeholder = 'Select departments…',
   emptyHint = 'Sync employees first',
+  includeAllDepartmentsOption = false,
 }: DepartmentMultiSelectProps) {
   const listboxId = useId()
   const searchInputId = useId()
@@ -35,10 +42,14 @@ export function DepartmentMultiSelect({
   const [search, setSearch] = useState('')
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
 
-  const filtered = useMemo(
-    () => filterDepartments(departments, search),
-    [departments, search],
-  )
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const named = filterDepartments(departments, search)
+    if (!includeAllDepartmentsOption) return named
+    const showAllOption =
+      !q || ALL_DEPARTMENTS_LABEL.toLowerCase().includes(q) || ALL_DEPARTMENTS_SCOPE.includes(q)
+    return showAllOption ? [ALL_DEPARTMENTS_SCOPE, ...named] : named
+  }, [departments, search, includeAllDepartmentsOption])
   const searchActive = search.trim().length > 0
   const selectedSet = useMemo(() => new Set(selected), [selected])
 
@@ -127,7 +138,11 @@ export function DepartmentMultiSelect({
   function selectAllVisible() {
     const next = new Set(selected)
     for (const department of filtered) next.add(department)
-    onChange([...next].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })))
+    onChange([...next].sort((a, b) => {
+      if (a === ALL_DEPARTMENTS_SCOPE) return -1
+      if (b === ALL_DEPARTMENTS_SCOPE) return 1
+      return a.localeCompare(b, undefined, { sensitivity: 'base' })
+    }))
   }
 
   function clearAll() {
@@ -172,12 +187,14 @@ export function DepartmentMultiSelect({
             <span className="pd-dept-select__chips" aria-label={`${selected.length} departments selected`}>
               {selected.map((department) => (
                 <span key={department} className="pd-dept-select__chip">
-                  <span className="pd-dept-select__chip-label">{department}</span>
+                  <span className="pd-dept-select__chip-label">
+                    {departmentScopeLabel(department)}
+                  </span>
                   {!disabled ? (
                     <button
                       type="button"
                       className="pd-dept-select__chip-remove"
-                      aria-label={`Remove ${department}`}
+                      aria-label={`Remove ${departmentScopeLabel(department)}`}
                       onClick={(event) => removeDepartment(department, event)}
                     >
                       <X size={12} aria-hidden />
@@ -238,7 +255,7 @@ export function DepartmentMultiSelect({
                         checked={checked}
                         onChange={() => toggleDepartment(department)}
                       />
-                      <span>{department}</span>
+                      <span>{departmentScopeLabel(department)}</span>
                     </label>
                   </li>
                 )
@@ -266,7 +283,9 @@ export function DepartmentMultiSelect({
               </button>
             </div>
             <span className="pd-dept-select__footer-count">
-              {selected.length} of {departments.length} selected
+              {selected.filter((value) => value !== ALL_DEPARTMENTS_SCOPE).length} of{' '}
+              {departments.length} selected
+              {selectedSet.has(ALL_DEPARTMENTS_SCOPE) ? ' · all departments' : ''}
             </span>
           </div>
         </div>

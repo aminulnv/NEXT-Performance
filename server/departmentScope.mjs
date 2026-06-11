@@ -1,16 +1,34 @@
 /** Roles that enforce scoped_departments when the array is non-empty. */
 const DEPARTMENT_SCOPED_ROLES = new Set(['hrbp'])
 
+/** Stored in scoped_departments — access every department; other entries preserved for later. */
+export const ALL_DEPARTMENTS_SCOPE = '*'
+
+export function hasAllDepartmentsScope(scopedDepartments) {
+  return scopedDepartments?.includes(ALL_DEPARTMENTS_SCOPE) ?? false
+}
+
 export function normalizeScopedDepartments(value) {
   if (value == null) return null
   if (!Array.isArray(value)) return null
   const departments = [...new Set(value.map((d) => String(d).trim()).filter(Boolean))]
-  return departments.length > 0 ? departments.sort((a, b) => a.localeCompare(b)) : null
+  if (departments.length === 0) return null
+
+  const includesAll = departments.includes(ALL_DEPARTMENTS_SCOPE)
+  const named = departments
+    .filter((department) => department !== ALL_DEPARTMENTS_SCOPE)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+
+  if (includesAll) return [ALL_DEPARTMENTS_SCOPE, ...named]
+  return named
 }
 
 export function getDepartmentScope(user) {
   if (!user?.role || !DEPARTMENT_SCOPED_ROLES.has(user.role)) return null
-  return normalizeScopedDepartments(user.scopedDepartments)
+  const normalized = normalizeScopedDepartments(user.scopedDepartments)
+  if (!normalized?.length) return null
+  if (hasAllDepartmentsScope(normalized)) return null
+  return normalized
 }
 
 export function filterEmployeesByDepartmentScope(employees, scope) {

@@ -1,5 +1,7 @@
 /** Resolve Revolut employee id/name by work email from cached directory or performance records. */
 
+import { employeeFullName, employeeEmail as employeeEmailFromRaw } from './employeeDirectory.mjs'
+
 function normalizeEmail(value) {
   return String(value ?? '')
     .trim()
@@ -7,17 +9,11 @@ function normalizeEmail(value) {
 }
 
 function employeeDisplayName(employee) {
-  if (!employee || typeof employee !== 'object') return ''
-  const parts = [employee.first_name, employee.last_name].filter(Boolean)
-  if (parts.length) return parts.join(' ')
-  return (
-    employee.full_name ??
-    employee.name ??
-    employee.display_name ??
-    ''
-  )
-    .toString()
-    .trim()
+  return employeeFullName(employee)
+}
+
+function employeeEmail(employee) {
+  return employeeEmailFromRaw(employee)
 }
 
 /** @param {unknown[]} employeesList */
@@ -73,6 +69,8 @@ export function buildEmployeesByEmailFromRecords(records) {
 
 let getCacheSnapshot = null
 let mergeEmployeesDirectory = null
+/** Latest Revolut /employees index — used when memory cache is not loaded yet. */
+let revolutEmployeesByEmail = {}
 
 export function registerEmployeeCacheAccessor(fn) {
   getCacheSnapshot = fn
@@ -82,9 +80,25 @@ export function registerEmployeesDirectoryMerger(fn) {
   mergeEmployeesDirectory = fn
 }
 
-/** Merge a live Revolut /employees fetch into the in-memory performance cache. */
+/** Merge a live Revolut /employees fetch into caches used for email lookup. */
 export function mergeRevolutEmployeesDirectory(index) {
+  revolutEmployeesByEmail = {
+    ...revolutEmployeesByEmail,
+    ...(index ?? {}),
+  }
   mergeEmployeesDirectory?.(index)
+}
+
+export function resolveEmployeeMatchFromIndex(email, index = revolutEmployeesByEmail) {
+  const key = normalizeEmail(email)
+  if (!key || !key.includes('@')) return null
+  const match = index?.[key]
+  if (!match?.id) return null
+  return {
+    id: String(match.id),
+    name: match.name ?? null,
+    source: 'revolut_directory',
+  }
 }
 
 export function getEmployeesDirectoryFromCache() {
@@ -110,6 +124,9 @@ function employeesIndexFromCache(cache) {
 export function lookupEmployeeByEmail(email) {
   const key = normalizeEmail(email)
   if (!key || !key.includes('@')) return null
+
+  const fromRevolutIndex = resolveEmployeeMatchFromIndex(key, revolutEmployeesByEmail)
+  if (fromRevolutIndex) return fromRevolutIndex
 
   const cache = getCacheSnapshot?.() ?? null
   const fromDirectory = cache?.employeesByEmail?.[key]

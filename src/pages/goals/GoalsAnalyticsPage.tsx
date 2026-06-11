@@ -44,7 +44,12 @@ import type { EmployeeGoalStatus, GoalBreakdownRow } from '@/lib/goalsMonitoring
 import { PersonAvatar } from '@/components/performance/PersonAvatar'
 import { uniqueFieldValues } from '@/lib/metrics'
 import { allGoalsDetailsUrl, personGoalsSearchUrl } from '@/lib/goalsFilters'
-import { canAccessPerformanceData, getRoleDefinition, roleUsesDepartmentScope } from '@/lib/permissions'
+import { canAccessPerformanceData, getRoleDefinition } from '@/lib/permissions'
+import {
+  departmentScopeLabel,
+  hasNamedDepartmentScope,
+  namedScopedDepartments,
+} from '@/lib/departmentScope'
 import type { FlagPersonRow, GoalOwnerProfileLookup } from '@/lib/goalOwnerProfiles'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import '@/styles/performance.css'
@@ -713,8 +718,11 @@ export default function GoalsAnalyticsPage() {
   const canLoadPerformance = role ? canAccessPerformanceData(role) : false
   const canUploadGoals = role ? Boolean(getRoleDefinition(role)?.uploadGoals) : false
   const scopedDepartments = user?.scopedDepartments ?? null
-  const hasDepartmentScope =
-    Boolean(role && roleUsesDepartmentScope(role) && scopedDepartments?.length)
+  const hasNamedScope = hasNamedDepartmentScope(scopedDepartments)
+  const namedScopeDepartments = useMemo(
+    () => namedScopedDepartments(scopedDepartments),
+    [scopedDepartments],
+  )
   const {
     goals,
     dataset,
@@ -799,8 +807,8 @@ export default function GoalsAnalyticsPage() {
   }
 
   function onDepartmentFilterChange(next: string[]) {
-    if (hasDepartmentScope && scopedDepartments?.length) {
-      const allowed = new Set(scopedDepartments)
+    if (hasNamedScope && namedScopeDepartments.length) {
+      const allowed = new Set(namedScopeDepartments)
       setDepartmentFilter(next.filter((department) => allowed.has(department)))
       return
     }
@@ -808,8 +816,11 @@ export default function GoalsAnalyticsPage() {
   }
 
   const departmentOptions = useMemo(() => {
-    if (hasDepartmentScope && scopedDepartments?.length) {
-      return scopedDepartments.map((department) => ({ value: department, label: department }))
+    if (hasNamedScope && namedScopeDepartments.length) {
+      return namedScopeDepartments.map((department) => ({
+        value: department,
+        label: departmentScopeLabel(department),
+      }))
     }
 
     const roster = rosterForFilterOptions(
@@ -826,7 +837,7 @@ export default function GoalsAnalyticsPage() {
     return [...departments]
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
       .map((department) => ({ value: department, label: department }))
-  }, [activeRoster, rosterFilterState, ownerProfileLookup, hasDepartmentScope, scopedDepartments])
+  }, [activeRoster, rosterFilterState, ownerProfileLookup, hasNamedScope, namedScopeDepartments])
 
   const teamOptions = useMemo(() => {
     const roster = rosterForFilterOptions(
@@ -1109,7 +1120,7 @@ export default function GoalsAnalyticsPage() {
           <FilterMultiSelect
             id="monitoring-department-filter"
             label="Department"
-            placeholder={hasDepartmentScope ? 'All your departments' : 'All departments'}
+            placeholder={hasNamedScope ? 'All your departments' : 'All departments'}
             options={departmentOptions}
             selected={departmentFilter}
             onChange={onDepartmentFilterChange}

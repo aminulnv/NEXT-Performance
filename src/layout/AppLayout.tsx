@@ -187,7 +187,11 @@ export function AppLayout({
               onLanguageClick={onLanguageClick}
               onMobileMenuOpen={() => setIsMobileOpen(true)}
               isMobile={isMobile}
-              subNavItems={currentNavItem?.children}
+              subNavItems={
+                currentNavItem?.children && currentNavItem.children.length > 1
+                  ? currentNavItem.children
+                  : undefined
+              }
             />
             <main
               data-tour="main-content"

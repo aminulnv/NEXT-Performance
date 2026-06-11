@@ -73,6 +73,8 @@ function employeeEmail(employee) {
   return ''
 }
 
+export { employeeFullName, employeeEmail }
+
 /** @param {unknown} employee */
 export function normalizeEmployeeForDirectory(employee) {
   if (!employee || typeof employee !== 'object') return null

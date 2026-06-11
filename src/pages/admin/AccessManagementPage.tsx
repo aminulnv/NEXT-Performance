@@ -15,6 +15,10 @@ import {
 import { downloadAccessUsersTemplate } from '@/lib/accessCsvTemplate'
 import { Plus, Upload, Download, Users, RefreshCw } from 'lucide-react'
 import {
+  isValidScopedDepartmentSelection,
+  normalizeScopedDepartments,
+} from '@/lib/departmentScope'
+import {
   DATA_ACCESS_LABELS,
   roleUsesDepartmentScope,
   slugifyRoleId,
@@ -313,7 +317,10 @@ export default function AccessManagementPage() {
       setError(`Unknown role "${row.role}". Save roles first or pick another role.`)
       return
     }
-    if (roleUsesDepartmentScope(row.role) && row.scopedDepartments.length === 0) {
+    if (
+      roleUsesDepartmentScope(row.role) &&
+      !isValidScopedDepartmentSelection(row.scopedDepartments)
+    ) {
       setError('HRBP users must have at least one assigned department.')
       return
     }
@@ -327,7 +334,7 @@ export default function AccessManagementPage() {
         name: row.name.trim() || undefined,
         employeeId: row.employeeId.trim() || undefined,
         scopedDepartments: roleUsesDepartmentScope(row.role)
-          ? row.scopedDepartments
+          ? normalizeScopedDepartments(row.scopedDepartments)
           : null,
       })
       await reload()
@@ -335,27 +342,6 @@ export default function AccessManagementPage() {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSavingKey(null)
-    }
-  }
-
-  async function handleBulkCsv(file: File | undefined) {
-    if (!file || bulkUploading) return
-    setBulkUploading(true)
-    setBulkMessage(null)
-    setError(null)
-    try {
-      const text = await file.text()
-      const result = await uploadAccessUsersCsv(text)
-      setBulkMessage(
-        `Imported ${result.total} users (${result.added} new, ${result.updated} updated).`,
-      )
-      setConfig((c) => (c ? { ...c, users: result.users } : c))
-      const defaultRole = config ? defaultAssignRole(config.roles) : 'manager'
-      setRows(rowsFromUsers(result.users, defaultRole))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bulk import failed')
-    } finally {
-      setBulkUploading(false)
     }
   }
 
@@ -400,6 +386,27 @@ export default function AccessManagementPage() {
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove')
+    }
+  }
+
+  async function handleBulkCsv(file: File | undefined) {
+    if (!file || bulkUploading) return
+    setBulkUploading(true)
+    setBulkMessage(null)
+    setError(null)
+    try {
+      const text = await file.text()
+      const result = await uploadAccessUsersCsv(text)
+      setBulkMessage(
+        `Imported ${result.total} users (${result.added} new, ${result.updated} updated).`,
+      )
+      setConfig((c) => (c ? { ...c, users: result.users } : c))
+      const defaultRole = config ? defaultAssignRole(config.roles) : 'manager'
+      setRows(rowsFromUsers(result.users, defaultRole))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk import failed')
+    } finally {
+      setBulkUploading(false)
     }
   }
 
@@ -546,8 +553,7 @@ export default function AccessManagementPage() {
           Edit rows to update users, or fill the blank row at the bottom to add someone new.
           Revolut IDs auto-fill on save when possible. Edit manually if needed, or use{' '}
           <strong>Sync</strong> to fetch the latest match from Revolut for that user.
-          HRBP users must be assigned one or more departments — they only see goal analytics
-          for those departments.
+          HRBP users must be assigned one or more departments.
         </p>
         {syncMessage ? <p className="pd-upload-meta">{syncMessage}</p> : null}
         <div className="pd-table-wrap">
@@ -623,8 +629,12 @@ export default function AccessManagementPage() {
                           id={`departments-${row.key}`}
                           departments={departmentOptions}
                           selected={row.scopedDepartments}
+                          includeAllDepartmentsOption
                           onChange={(scopedDepartments) =>
-                            updateRow(row.key, { scopedDepartments })
+                            updateRow(row.key, {
+                              scopedDepartments:
+                                normalizeScopedDepartments(scopedDepartments) ?? [],
+                            })
                           }
                           disabled={rowBusy}
                         />

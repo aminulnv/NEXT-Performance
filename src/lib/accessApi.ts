@@ -76,6 +76,7 @@ export type SyncRevolutUserResult = {
   role: Role
   name: string | null
   employeeId: string | null
+  scopedDepartments: string[] | null
   directoryCount: number
   synced: boolean
   message: string
@@ -98,13 +99,21 @@ export async function syncAccessUserWithRevolut(email: string): Promise<SyncRevo
   return res.json() as Promise<SyncRevolutUserResult>
 }
 
+export type SaveAccessUserResult = AccessUser & {
+  revolutMatch?: {
+    employeeId: string
+    name: string | null
+    source: string
+  } | null
+}
+
 export async function saveAccessUser(payload: {
   email: string
   role: Role
   name?: string
   employeeId?: string
   scopedDepartments?: string[] | null
-}): Promise<void> {
+}): Promise<SaveAccessUserResult> {
   const res = await apiFetch('/api/access/users', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -114,6 +123,7 @@ export async function saveAccessUser(payload: {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
     throw new Error(body.error ?? 'Failed to save user')
   }
+  return res.json() as Promise<SaveAccessUserResult>
 }
 
 export type BulkImportResult = {

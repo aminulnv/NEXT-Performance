@@ -10,7 +10,7 @@ import { parseAccessCsv } from './parseAccessCsv.mjs'
 import { loadPermissionsConfig, rolesForAccessApi } from './permissions.mjs'
 import { requireAuth, requireRole, isAuthEnabled } from './auth.mjs'
 import { getSupabaseConfigHint } from './supabaseAdmin.mjs'
-import { getEmployeesDirectoryFromCache, lookupEmployeeByEmail } from './employeeLookup.mjs'
+import { getEmployeesDirectoryFromCache, lookupEmployeeByEmail, resolveEmployeeMatchFromIndex } from './employeeLookup.mjs'
 import { fetchRevolutEmployeesByEmail } from './revolutEmployees.mjs'
 import { loadEmployeesFromSupabase } from './employeesStoreSupabase.mjs'
 import {
@@ -102,9 +102,11 @@ export function registerAccessRoutes(app) {
         }
 
         let directoryCount = 0
+        let fetchedIndex = null
         try {
           const fetched = await fetchRevolutEmployeesByEmail()
           directoryCount = fetched.count
+          fetchedIndex = fetched.index
         } catch (err) {
           console.error('[access] Revolut employees fetch failed:', err)
           return res.status(502).json({
@@ -115,13 +117,15 @@ export function registerAccessRoutes(app) {
           })
         }
 
-        const match = lookupEmployeeByEmail(email)
+        const match =
+          resolveEmployeeMatchFromIndex(email, fetchedIndex) ?? lookupEmployeeByEmail(email)
         const entry = await upsertUser(
           email,
           {
             role: existing.role,
             name: match?.name ?? existing.name ?? undefined,
             employeeId: match?.id ?? existing.employeeId ?? undefined,
+            scopedDepartments: existing.scopedDepartments ?? undefined,
           },
           { preferRevolut: true },
         )

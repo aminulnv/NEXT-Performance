@@ -4,7 +4,9 @@ import {
   buildEmployeesByEmailFromList,
   buildEmployeesByEmailFromRecords,
   lookupEmployeeByEmail,
+  mergeRevolutEmployeesDirectory,
   registerEmployeeCacheAccessor,
+  resolveEmployeeMatchFromIndex,
 } from './employeeLookup.mjs'
 
 describe('employeeLookup', () => {
@@ -37,5 +39,16 @@ describe('employeeLookup', () => {
     const match = lookupEmployeeByEmail('hr@nextventures.io')
     assert.equal(match?.id, '12')
     assert.equal(match?.source, 'revolut_directory')
+  })
+
+  it('resolveEmployeeMatchFromIndex works without memory cache', () => {
+    registerEmployeeCacheAccessor(() => null)
+    mergeRevolutEmployeesDirectory({
+      'lam@nextventures.io': { id: '501', name: 'Chris Lam' },
+    })
+    const match = resolveEmployeeMatchFromIndex('lam@nextventures.io')
+    assert.equal(match?.id, '501')
+    assert.equal(match?.name, 'Chris Lam')
+    assert.equal(lookupEmployeeByEmail('lam@nextventures.io')?.id, '501')
   })
 })

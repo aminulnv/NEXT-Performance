@@ -27,7 +27,11 @@ import {
   employeeGoalsUrl,
   readGoalsFilters,
 } from '@/lib/goalsFilters'
-import { roleUsesDepartmentScope } from '@/lib/permissions'
+import {
+  departmentScopeLabel,
+  hasNamedDepartmentScope,
+  namedScopedDepartments,
+} from '@/lib/departmentScope'
 import {
   buildGoalRosterIndex,
   departmentOptionsFromRoster,
@@ -76,10 +80,13 @@ function uniqueGoalField(
 }
 
 export default function GoalsPage() {
-  const { role, user } = useAuth()
+  const { user } = useAuth()
   const scopedDepartments = user?.scopedDepartments ?? null
-  const hasDepartmentScope =
-    Boolean(role && roleUsesDepartmentScope(role) && scopedDepartments?.length)
+  const hasNamedScope = hasNamedDepartmentScope(scopedDepartments)
+  const namedScopeDepartments = useMemo(
+    () => namedScopedDepartments(scopedDepartments),
+    [scopedDepartments],
+  )
   const { goals, dataset, loading, uploading, error, uploadCsv, reload } = useGoalsData()
   const { records, loading: perfLoading } = usePerformanceData()
   const {
@@ -170,11 +177,14 @@ export default function GoalsPage() {
   const goalRosterIndex = useMemo(() => buildGoalRosterIndex(activeRoster), [activeRoster])
 
   const departmentOptions = useMemo(() => {
-    if (hasDepartmentScope && scopedDepartments?.length) {
-      return scopedDepartments.map((department) => ({ value: department, label: department }))
+    if (hasNamedScope && namedScopeDepartments.length) {
+      return namedScopeDepartments.map((department) => ({
+        value: department,
+        label: departmentScopeLabel(department),
+      }))
     }
     return departmentOptionsFromRoster(activeRoster, rosterFilterState)
-  }, [activeRoster, rosterFilterState, hasDepartmentScope, scopedDepartments])
+  }, [activeRoster, rosterFilterState, hasNamedScope, namedScopeDepartments])
 
   const teamOptions = useMemo(
     () => teamOptionsFromRoster(activeRoster, rosterFilterState),
@@ -198,8 +208,8 @@ export default function GoalsPage() {
   }, [teamOptions])
 
   function onDepartmentFilterChange(next: string[]) {
-    if (hasDepartmentScope && scopedDepartments?.length) {
-      const allowed = new Set(scopedDepartments)
+    if (hasNamedScope && namedScopeDepartments.length) {
+      const allowed = new Set(namedScopeDepartments)
       setDepartmentFilter(next.filter((department) => allowed.has(department)))
       return
     }
@@ -449,7 +459,7 @@ export default function GoalsPage() {
           <FilterMultiSelect
             id="goals-department"
             label="Department"
-            placeholder={hasDepartmentScope ? 'All your departments' : 'All departments'}
+            placeholder={hasNamedScope ? 'All your departments' : 'All departments'}
             options={departmentOptions}
             selected={departmentFilter}
             onChange={onDepartmentFilterChange}

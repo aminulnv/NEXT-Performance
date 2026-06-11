@@ -1,19 +1,6 @@
 import type { NavItem } from '@/layout/types'
 import { pageKeyFromPathname } from '@/lib/permissions'
 
-const PATH_OVERRIDES: Record<string, string> = {
-  '/organization': 'organization.departments',
-  '/performance': 'performance.analytics',
-  '/goals': 'goals.analytics',
-  '/admin': 'admin.settings',
-}
-
-function pageKeyForNavPath(path: string): string | null {
-  const override = PATH_OVERRIDES[path]
-  if (override) return override
-  return pageKeyFromPathname(path)
-}
-
 export function filterNavItems(
   items: NavItem[],
   canAccessPage: (pageKey: string) => boolean,
@@ -31,7 +18,7 @@ export function filterNavItems(
 
     if (item.children?.length) {
       const children = item.children.filter((child) => {
-        const key = pageKeyForNavPath(child.path)
+        const key = pageKeyFromPathname(child.path)
         return key ? canAccessPage(key) : true
       })
       if (children.length === 0) continue
@@ -39,7 +26,7 @@ export function filterNavItems(
       continue
     }
 
-    const key = pageKeyForNavPath(item.path)
+    const key = pageKeyFromPathname(item.path)
     if (key && !canAccessPage(key)) continue
     result.push(item)
   }
