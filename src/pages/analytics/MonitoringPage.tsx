@@ -46,8 +46,63 @@ import type { EmployeeGoalStatus, GoalBreakdownRow } from '@/lib/goalsMonitoring
 import { PersonAvatar } from '@/components/performance/PersonAvatar'
 import { uniqueFieldValues } from '@/lib/metrics'
 import { allGoalsDetailsUrl, personGoalsSearchUrl } from '@/lib/goalsFilters'
-import type { FlagPersonRow } from '@/lib/goalOwnerProfiles'
+import type { FlagPersonRow, GoalOwnerProfileLookup } from '@/lib/goalOwnerProfiles'
+import type { EmployeeDirectoryEntry } from '@/types/employee'
 import '@/styles/performance.css'
+
+type RosterFilterState = {
+  departments: string[]
+  teams: string[]
+  countries: string[]
+}
+
+type RosterFilterSkip = {
+  department?: boolean
+  team?: boolean
+  country?: boolean
+}
+
+function employeeMatchesRosterFilters(
+  employee: EmployeeDirectoryEntry,
+  filters: RosterFilterState,
+  ownerProfileLookup: GoalOwnerProfileLookup,
+  skip: RosterFilterSkip = {},
+): boolean {
+  if (!skip.department && filters.departments.length > 0) {
+    const department = employee.department?.trim()
+    if (!department || !filters.departments.includes(department)) return false
+  }
+  if (!skip.team && filters.teams.length > 0) {
+    const teamKey = rosterTeamKey(employee)
+    if (!teamKey || !filters.teams.includes(teamKey)) return false
+  }
+  if (!skip.country && filters.countries.length > 0) {
+    if (
+      !filters.countries.includes(
+        resolveDirectoryEmployeeCountry(employee, ownerProfileLookup),
+      )
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function rosterForFilterOptions(
+  roster: EmployeeDirectoryEntry[],
+  filters: RosterFilterState,
+  ownerProfileLookup: GoalOwnerProfileLookup,
+  skip: RosterFilterSkip,
+): EmployeeDirectoryEntry[] {
+  const appliesOtherFilters =
+    (!skip.department && filters.departments.length > 0) ||
+    (!skip.team && filters.teams.length > 0) ||
+    (!skip.country && filters.countries.length > 0)
+  if (!appliesOtherFilters) return roster
+  return roster.filter((employee) =>
+    employeeMatchesRosterFilters(employee, filters, ownerProfileLookup, skip),
+  )
+}
 
 function rowGoalsPath(row: FlagPersonRow): string | null {
   return personGoalsSearchUrl(row.name)
@@ -72,6 +127,20 @@ function filterBreakdownRows(rows: GoalBreakdownRow[], query: string): GoalBreak
     const hay = [row.label, row.key].filter(Boolean).join(' ').toLowerCase()
     return hay.includes(q)
   })
+}
+
+function rosterTeamKey(employee: { department?: string | null; team?: string | null }): string | null {
+  const team = employee.team?.trim()
+  if (!team) return null
+  const department = employee.department?.trim() || 'Unknown'
+  return `${department}::${team}`
+}
+
+function rosterTeamLabel(employee: { department?: string | null; team?: string | null }): string {
+  const team = employee.team?.trim()
+  if (!team) return ''
+  const department = employee.department?.trim()
+  return department ? `${team} · ${department}` : team
 }
 
 function PersonWithAvatar({
@@ -674,6 +743,8 @@ export default function MonitoringPage() {
   }, [perfCycles, goalCycles])
 
   const [reviewCycleFilter, setReviewCycleFilter] = useState('Q2 2026')
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([])
+  const [teamFilter, setTeamFilter] = useState<string[]>([])
   const [countryFilter, setCountryFilter] = useState<string[]>([])
   const [devSearch, setDevSearch] = useState('')
   const [devDeptFilter, setDevDeptFilter] = useState('')
@@ -704,23 +775,102 @@ export default function MonitoringPage() {
     [records, directoryEmployees],
   )
 
+  const rosterFilterState = useMemo(
+    (): RosterFilterState => ({
+      departments: departmentFilter,
+      teams: teamFilter,
+      countries: countryFilter,
+    }),
+    [departmentFilter, teamFilter, countryFilter],
+  )
+
+  const rosterFiltersActive =
+    rosterFilterState.departments.length > 0 ||
+    rosterFilterState.teams.length > 0 ||
+    rosterFilterState.countries.length > 0
+
+  const departmentOptions = useMemo(() => {
+    const roster = rosterForFilterOptions(
+      activeRoster,
+      rosterFilterState,
+      ownerProfileLookup,
+      { department: true },
+    )
+    const departments = new Set<string>()
+    for (const employee of roster) {
+      const department = employee.department?.trim()
+      if (department) departments.add(department)
+    }
+    return [...departments]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      .map((department) => ({ value: department, label: department }))
+  }, [activeRoster, rosterFilterState, ownerProfileLookup])
+
+  const teamOptions = useMemo(() => {
+    const roster = rosterForFilterOptions(
+      activeRoster,
+      rosterFilterState,
+      ownerProfileLookup,
+      { team: true },
+    )
+    const teams = new Map<string, string>()
+    for (const employee of roster) {
+      const key = rosterTeamKey(employee)
+      if (!key) continue
+      teams.set(key, rosterTeamLabel(employee))
+    }
+    return [...teams.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+  }, [activeRoster, rosterFilterState, ownerProfileLookup])
+
   const countryOptions = useMemo(() => {
+    const roster = rosterForFilterOptions(
+      activeRoster,
+      rosterFilterState,
+      ownerProfileLookup,
+      { country: true },
+    )
     const labels = new Set<string>()
-    for (const employee of activeRoster) {
+    for (const employee of roster) {
       labels.add(resolveDirectoryEmployeeCountry(employee, ownerProfileLookup))
     }
     return sortMonitoringCountryLabels([...labels]).map((label) => ({
       value: label,
       label,
     }))
-  }, [activeRoster, ownerProfileLookup])
+  }, [activeRoster, rosterFilterState, ownerProfileLookup])
+
+  useEffect(() => {
+    const valid = new Set(departmentOptions.map((option) => option.value))
+    setDepartmentFilter((current) => {
+      const next = current.filter((value) => valid.has(value))
+      return next.length === current.length ? current : next
+    })
+  }, [departmentOptions])
+
+  useEffect(() => {
+    const valid = new Set(teamOptions.map((option) => option.value))
+    setTeamFilter((current) => {
+      const next = current.filter((value) => valid.has(value))
+      return next.length === current.length ? current : next
+    })
+  }, [teamOptions])
+
+  useEffect(() => {
+    const valid = new Set(countryOptions.map((option) => option.value))
+    setCountryFilter((current) => {
+      const next = current.filter((value) => valid.has(value))
+      return next.length === current.length ? current : next
+    })
+  }, [countryOptions])
 
   const filteredRoster = useMemo(() => {
-    if (countryFilter.length === 0) return activeRoster
+    if (!rosterFiltersActive) return activeRoster
     return activeRoster.filter((employee) =>
-      countryFilter.includes(resolveDirectoryEmployeeCountry(employee, ownerProfileLookup)),
+      employeeMatchesRosterFilters(employee, rosterFilterState, ownerProfileLookup),
     )
-  }, [activeRoster, countryFilter, ownerProfileLookup])
+  }, [activeRoster, rosterFiltersActive, rosterFilterState, ownerProfileLookup])
 
   const selectedCycleHasGoals = useMemo(() => {
     if (!reviewCycleFilter) return true
@@ -796,7 +946,7 @@ export default function MonitoringPage() {
       ? goals.filter((goal) => goalMatchesReviewCycle(goal, reviewCycleFilter))
       : goals
 
-    if (countryFilter.length > 0) {
+    if (rosterFiltersActive) {
       const rosterScope = new Set<string>()
       for (const employee of filteredRoster) {
         rosterScope.add(employee.id)
@@ -818,7 +968,7 @@ export default function MonitoringPage() {
       metricRows: filteredGoals.length,
       uniqueGoals: uniqueGoalIds.size,
     }
-  }, [goals, reviewCycleFilter, countryFilter, filteredRoster])
+  }, [goals, reviewCycleFilter, rosterFiltersActive, filteredRoster])
 
   const goalsDetailsUrl = useMemo(() => {
     if (!reviewCycleFilter) return allGoalsDetailsUrl()
@@ -972,6 +1122,24 @@ export default function MonitoringPage() {
             </select>
           </div>
           <FilterMultiSelect
+            id="monitoring-department-filter"
+            label="Department"
+            placeholder="All departments"
+            options={departmentOptions}
+            selected={departmentFilter}
+            onChange={setDepartmentFilter}
+            active={departmentFilter.length > 0}
+          />
+          <FilterMultiSelect
+            id="monitoring-team-filter"
+            label="Team"
+            placeholder="All teams"
+            options={teamOptions}
+            selected={teamFilter}
+            onChange={setTeamFilter}
+            active={teamFilter.length > 0}
+          />
+          <FilterMultiSelect
             id="monitoring-country-filter"
             label="Country"
             placeholder="All countries"
@@ -996,8 +1164,8 @@ export default function MonitoringPage() {
             />
           ) : filteredRoster.length === 0 ? (
             <EmptyState
-              title="No employees match country filter"
-              description="Clear the country filter or choose different countries to restore the monitoring view."
+              title="No employees match filters"
+              description="Clear department, team, or country filters to restore the monitoring view."
             />
           ) : (
             <>
@@ -1036,6 +1204,12 @@ export default function MonitoringPage() {
                 title="By country"
                 rows={goalsSummary.breakdownByLocation}
                 searchPlaceholder="Search country…"
+              />
+              <SubmissionBreakdownTable
+                title="By team"
+                rows={goalsSummary.breakdownByTeam}
+                className="pd-breakdown-grid__full"
+                searchPlaceholder="Search team or department…"
               />
               <SubmissionBreakdownTable
                 title="By manager"

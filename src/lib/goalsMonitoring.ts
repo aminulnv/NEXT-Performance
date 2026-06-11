@@ -62,6 +62,7 @@ export type EmployeeGoalStatus = {
   ownerFullName: string | null
   employeeId: string | null
   department: string | null
+  team: string | null
   location: string | null
   lineManagerKey: string
   lineManagerName: string
@@ -149,6 +150,7 @@ export type GoalsMonitoringSummary = {
   overdueDay30NotApproved: EmployeeGoalStatus[]
   managerCompliance: ManagerComplianceMetrics
   breakdownByDepartment: GoalBreakdownRow[]
+  breakdownByTeam: GoalBreakdownRow[]
   breakdownByLocation: GoalBreakdownRow[]
   breakdownByManager: GoalBreakdownRow[]
   qualityWrongGoalCount: EmployeeGoalStatus[]
@@ -750,6 +752,7 @@ function employeeGoalStatusFromGoals(
     employeeId: string | null
     ownerFullName: string | null
     department: string | null
+    team: string | null
     location: string | null
     lineManagerKey: string
     lineManagerName: string
@@ -771,6 +774,7 @@ function employeeGoalStatusFromGoals(
     ownerFullName: context.ownerFullName,
     employeeId: context.employeeId,
     department: context.department,
+    team: context.team,
     location: context.location,
     lineManagerKey: context.lineManagerKey,
     lineManagerName: context.lineManagerName,
@@ -869,6 +873,7 @@ function exportOnlyGoalStatuses(
       ownerFullName:
         deduped[0]?.employeeName ?? deduped[0]?.ownerFullName ?? deduped[0]?.owner ?? null,
       department: deduped[0]?.organisationName ?? null,
+      team: null,
       location: null,
       lineManagerKey: UNKNOWN_LINE_MANAGER.key,
       lineManagerName: UNKNOWN_LINE_MANAGER.name,
@@ -925,6 +930,7 @@ export function buildEmployeeGoalStatuses(
           employeeId: employee.id,
           ownerFullName: employee.name,
           department: employee.department,
+          team: employee.team?.trim() || null,
           location,
           lineManagerKey: lineManagerKeyFromDirectory(employee),
           lineManagerName: employee.lineManagerName?.trim() || UNKNOWN_LINE_MANAGER.name,
@@ -952,6 +958,7 @@ export function buildEmployeeGoalStatuses(
         employeeId: maps.employeeIdByOwner.get(ownerKey) ?? ownerGoals[0]?.employeeId ?? null,
         ownerFullName: ownerGoals[0]?.ownerFullName ?? ownerGoals[0]?.employeeName ?? null,
         department: ownerGoals[0]?.organisationName ?? null,
+        team: null,
         location: null,
         lineManagerKey: UNKNOWN_LINE_MANAGER.key,
         lineManagerName: UNKNOWN_LINE_MANAGER.name,
@@ -1056,6 +1063,11 @@ export function buildGoalsMonitoringSummary(
     return 'Unknown'
   })
 
+  const breakdownByTeam = buildSubmissionBreakdownByKey(
+    scopedEmployees,
+    (employee) => employeeTeamBreakdownLabel(employee, ownerProfileLookup),
+  ).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+
   const breakdownByLocation = buildSubmissionBreakdownByKey(scopedEmployees, (employee) =>
     resolveEmployeeLocation(employee, ownerProfileLookup),
   )
@@ -1103,6 +1115,7 @@ export function buildGoalsMonitoringSummary(
     overdueDay30NotApproved: overdueDay30,
     managerCompliance,
     breakdownByDepartment,
+    breakdownByTeam,
     breakdownByLocation,
     breakdownByManager,
     qualityWrongGoalCount,
@@ -1146,6 +1159,19 @@ function employeeDepartmentLabel(
     if (name) return name
   }
   return fromPerf?.department?.trim() || '—'
+}
+
+function employeeTeamBreakdownLabel(
+  employee: EmployeeGoalStatus,
+  lookup?: GoalOwnerProfileLookup,
+): string {
+  const team = employee.team?.trim()
+  if (!team) return 'Unknown'
+  const department = lookup
+    ? employeeDepartmentLabel(employee, lookup)
+    : employee.department?.trim() || '—'
+  if (department && department !== '—') return `${team} · ${department}`
+  return team
 }
 
 export function buildSubmissionBreakdownByKey(

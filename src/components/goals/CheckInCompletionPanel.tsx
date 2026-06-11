@@ -23,6 +23,7 @@ function ownerRow(
       ownerFullName: row.ownerFullName,
       employeeId: null,
       department: null,
+      team: null,
       location: null,
       lineManagerKey: '__unknown_line_manager__',
       lineManagerName: 'Unknown line manager',

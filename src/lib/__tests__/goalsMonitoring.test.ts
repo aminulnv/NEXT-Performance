@@ -963,6 +963,62 @@ describe('buildSubmissionBreakdown', () => {
     expect(summary.submitted[0].employeeId).toBe('emp-a')
   })
 
+  it('groups submission breakdown by team within department', () => {
+    const goals: GoalRecord[] = [
+      goal({
+        id: 'a1',
+        goal_id: '10',
+        owner: 'alice@co.com',
+        employee_id: 'emp-a',
+        title: 'Goal A',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'approved',
+        review_cycle: 'Q2 2026',
+      }),
+      goal({
+        id: 'b1',
+        goal_id: '11',
+        owner: 'bob@co.com',
+        employee_id: 'emp-b',
+        title: 'Goal B',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'draft',
+        review_cycle: 'Q2 2026',
+      }),
+    ]
+
+    const summary = buildGoalsMonitoringSummary(goals, {
+      cycleFilter: 'Q2 2026',
+      calendarQuarter: 2,
+      calendarYear: 2026,
+      activeRoster: [
+        roster({
+          id: 'emp-a',
+          email: 'alice@co.com',
+          department: 'Engineering',
+          team: 'Platform',
+          joiningDateTime: '2025-01-01',
+        }),
+        roster({
+          id: 'emp-b',
+          email: 'bob@co.com',
+          department: 'Engineering',
+          team: 'Growth',
+          joiningDateTime: '2025-01-01',
+        }),
+      ],
+    })
+
+    expect(summary.breakdownByTeam.map((row) => row.label).sort()).toEqual([
+      'Growth · Engineering',
+      'Platform · Engineering',
+    ])
+    expect(summary.breakdownByTeam.find((row) => row.label === 'Platform · Engineering')).toMatchObject({
+      totalEmployees: 1,
+      submittedCount: 1,
+    })
+  })
+
   it('normalizes location breakdown to full country names', () => {
     const goals: GoalRecord[] = [
       goal({

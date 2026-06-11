@@ -22,6 +22,7 @@ function employee(partial: Partial<EmployeeGoalStatus>): EmployeeGoalStatus {
     ownerFullName: 'Alice Smith',
     employeeId: 'emp-1',
     department: null,
+    team: null,
     location: null,
     lineManagerKey: '__unknown__',
     lineManagerName: 'Unknown line manager',
