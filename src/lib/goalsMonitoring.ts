@@ -14,7 +14,6 @@ import {
   extractLocationLabel,
   normalizeEmployeeLocation,
   resolveLineManagerForOwner,
-  resolveOwnerLocation,
   resolveProfileAvatar,
   type GoalOwnerProfileLookup,
   type LineManagerInfo,
