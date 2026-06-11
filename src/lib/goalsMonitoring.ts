@@ -813,18 +813,21 @@ function buildGoalAggregateMaps(goals: GoalRecord[], cycleFilter: string | null)
   for (const goal of goals) {
     if (cycleFilter && !goalMatchesReviewCycle(goal, cycleFilter)) continue
     const employeeId = goalEmployeeId(goal)
-    if (!employeeId) continue
+    const owner = goalOwner(goal)?.trim().toLowerCase()
 
-    const keys = new Set<string>()
-    const owner = goalOwner(goal)
-    if (owner) keys.add(owner.trim().toLowerCase())
-    const employeeName = normalizePersonName(goalEmployeeName(goal))
-    if (employeeName) keys.add(employeeName)
+    if (employeeId) {
+      const keys = new Set<string>()
+      if (owner) keys.add(owner)
+      const employeeName = normalizePersonName(goalEmployeeName(goal))
+      if (employeeName) keys.add(employeeName)
 
-    for (const key of keys) {
-      employeeIdByOwner.set(key, employeeId)
+      for (const key of keys) {
+        employeeIdByOwner.set(key, employeeId)
+      }
+      employeeIdByOwner.set(employeeId.trim().toLowerCase(), employeeId)
+    } else if (owner?.includes('@')) {
+      employeeIdByOwner.set(owner, owner)
     }
-    employeeIdByOwner.set(employeeId.trim().toLowerCase(), employeeId)
   }
 
   for (const [ownerKey, ownerGoals] of byOwner) {

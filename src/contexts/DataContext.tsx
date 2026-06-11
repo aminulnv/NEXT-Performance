@@ -213,19 +213,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const data = await fetchEmployeesDirectory(refresh)
       if (data.employees.length === 0) {
         setEmployees((current) => {
-          if (current.employees.length === 0) {
+          const warming = data.source === 'warming'
+          const keepStale = !warming && current.employees.length > 0
+          if (keepStale) {
             return {
               ...current,
               loading: false,
               fetchedAt: data.fetchedAt,
               source: data.source ?? current.source,
+              error: null,
             }
           }
           return {
             ...current,
+            employees: [],
+            count: 0,
             loading: false,
             fetchedAt: data.fetchedAt,
-            source: data.source ?? current.source,
+            source: data.source ?? null,
+            error: warming
+              ? 'Employee directory is syncing from Revolut. Reload shortly.'
+              : null,
           }
         })
         return
@@ -254,7 +262,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setEmployees((current) => ({
         ...current,
         loading: false,
-        error: current.employees.length ? null : message,
+        error: message,
       }))
     }
   }, [loadEmployees])

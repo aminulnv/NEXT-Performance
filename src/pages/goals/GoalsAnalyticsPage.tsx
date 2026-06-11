@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGoalsData } from '@/hooks/useGoalsData'
@@ -737,7 +737,16 @@ export default function GoalsAnalyticsPage() {
     employees: directoryEmployees,
     loading: employeesLoading,
     error: employeesError,
+    reload: reloadEmployees,
   } = useEmployeesDirectory()
+
+  // Refresh the People directory once when opening analytics (denominator for stat cards).
+  const didRefreshEmployees = useRef(false)
+  useEffect(() => {
+    if (didRefreshEmployees.current) return
+    didRefreshEmployees.current = true
+    void reloadEmployees()
+  }, [reloadEmployees])
 
   const activeRoster = useMemo(
     () => filterActiveEmployees(directoryEmployees),

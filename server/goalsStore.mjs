@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseGoalsCsv } from './parseGoalsCsv.mjs'
+import { enrichGoalsWithEmployeeIds } from './enrichGoalsEmployees.mjs'
 import { isSupabaseConfigured } from './supabaseAdmin.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -52,8 +53,14 @@ async function writeGoalsCache(payload) {
 
 export async function importGoalsFromCsv(csvText, { persist = true, importedBy } = {}) {
   const parsed = parseGoalsCsv(csvText)
+  if (!parsed.goals.length) {
+    throw new Error(
+      'CSV parsed to zero goals. Use the Revolut Goals export (Performance → Goals → All Details) and confirm the file has a header row plus goal rows.',
+    )
+  }
+  const enrichedGoals = await enrichGoalsWithEmployeeIds(parsed.goals)
   const payload = {
-    goals: parsed.goals,
+    goals: enrichedGoals,
     columns: parsed.columns,
     columnMap: parsed.columnMap,
     importedAt: new Date().toISOString(),
@@ -75,9 +82,14 @@ export async function loadGoalsDataset() {
   const store = await getSupabaseGoals()
   if (store) {
     const fromDb = await store.loadGoalsFromSupabase()
-    if (fromDb) return fromDb
+    if (fromDb) {
+      const goals = await enrichGoalsWithEmployeeIds(fromDb.goals)
+      return { ...fromDb, goals, goalCount: goals.length }
+    }
     return { ...EMPTY_DATASET, source: 'none' }
   }
   const cached = await readGoalsCache()
-  return cached ?? EMPTY_DATASET
+  if (!cached) return EMPTY_DATASET
+  const goals = await enrichGoalsWithEmployeeIds(cached.goals)
+  return { ...cached, goals, goalCount: goals.length }
 }

@@ -44,13 +44,15 @@ Writes encrypted data to Supabase and a local disk copy.
 
 ### 4. Verify
 
-`GET /api/health` should include:
+While logged in as **admin**, `GET /api/health/detail` should include:
 
 ```json
 {
   "performanceCache": "supabase-encrypted"
 }
 ```
+
+Public liveness check: `GET /api/health` → `{ "ok": true }`.
 
 Dashboard loads should show `cacheStatus: "supabase"` in the API response (no Revolut wait).
 

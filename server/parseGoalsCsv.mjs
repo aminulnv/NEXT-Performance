@@ -14,7 +14,6 @@ const COLUMN_ALIASES = {
     'employee',
     'employee name',
     'reviewed employee',
-    'owner full name',
     'assignee',
     'name',
   ],

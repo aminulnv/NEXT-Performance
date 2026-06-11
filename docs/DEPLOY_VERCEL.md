@@ -91,7 +91,8 @@ Add preview URLs too if you want OAuth on Vercel preview deployments.
 
    Or wait for the scheduled cron (every 6 hours).
 
-5. Verify: `GET /api/health` → `"platform": "vercel"`, `"supabase": true`
+5. Verify (logged in as admin): `GET /api/health/detail` → `"platform": "vercel"`, `"supabase": true`  
+   Public liveness: `GET /api/health` → `{ "ok": true }`
 
 ---
 
@@ -120,6 +121,7 @@ Optional: run the production stack locally with `npm run build:node && npm start
 | `no_access` | Add user in Supabase `dashboard_users` or via Admin → Access |
 | Empty performance data | Run cache warm; verify `PERFORMANCE_DATA_ENCRYPTION_KEY` + Supabase migration `00006` |
 | Cron returns 401 | Set `CRON_SECRET` on Vercel; cron sends `Authorization: Bearer <CRON_SECRET>` |
+| API won't start / auth errors on deploy | Remove `VITE_BYPASS_AUTH` and `AUTH_DISABLED` from Vercel; set `SESSION_SECRET` (≥16 chars) and `GOOGLE_*` |
 | Cache warm timeout | Pro plan allows 300s function duration (`maxDuration` in `vercel.json`) |
 
 ---

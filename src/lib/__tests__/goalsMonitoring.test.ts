@@ -243,6 +243,32 @@ describe('goalReviewCycle', () => {
 })
 
 describe('buildGoalsMonitoringSummary', () => {
+  it('matches goals to roster by owner email when employee_id is missing', () => {
+    const goals: GoalRecord[] = [
+      goal({
+        id: 'a1',
+        goal_id: '10',
+        owner: 'alice@co.com',
+        employee_id: null,
+        title: 'Goal A',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'approved',
+        review_cycle: 'Q2 2026',
+      }),
+    ]
+
+    const summary = buildGoalsMonitoringSummary(goals, {
+      cycleFilter: 'Q2 2026',
+      calendarQuarter: 2,
+      calendarYear: 2026,
+      referenceDate: new Date('2026-04-20'),
+      activeRoster: q2Roster,
+    })
+
+    expect(summary.submissionCounts.submitted.count).toBe(1)
+    expect(summary.submissionCounts.submitted.goalCount).toBe(1)
+  })
+
   it('computes submission and approval from employee KPI goals', () => {
     const goals: GoalRecord[] = [
       goal({

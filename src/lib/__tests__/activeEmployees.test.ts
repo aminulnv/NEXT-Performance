@@ -7,6 +7,7 @@ import {
   isActiveEmployee,
   isEmployeeEligibleForQuarter,
 } from '@/lib/activeEmployees'
+import { quarterStartDate } from '@/lib/calendarQuarters'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { PerformanceRecord } from '@/types/performance'
 
@@ -152,9 +153,13 @@ describe('employeesInScopeLabel', () => {
 
   it('includes cutoff date for Q2 2026 onward', () => {
     const { label, hint } = employeesInScopeLabel(2, 2026)
+    const cutoffLabel = new Date(`${quarterStartDate(2026, 2)}T12:00:00`).toLocaleDateString(
+      undefined,
+      { day: 'numeric', month: 'short', year: 'numeric' },
+    )
     expect(label).toBe('Employees in scope (Q2 2026)')
     expect(hint).toContain('joined on or before')
-    expect(hint).toContain('1 Apr 2026')
+    expect(hint).toContain(cutoffLabel)
   })
 })
 

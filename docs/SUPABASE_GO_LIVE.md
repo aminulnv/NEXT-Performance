@@ -66,7 +66,8 @@ When `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set, the app uses **`dashb
 
 When `PERFORMANCE_DATA_ENCRYPTION_KEY` is also set, Revolut data is cached in **`performance_encrypted_cache`** (fast loads; see `docs/PERFORMANCE_CACHE.md`).
 
-Check: `GET /api/health` → `"accessStorage": "supabase"`.
+Check (admin session): `GET /api/health/detail` → `"accessStorage": "supabase"`.  
+Public liveness only: `GET /api/health` → `{ "ok": true }`.
 
 ---
 
@@ -117,6 +118,7 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 | `employees_sync_state` | Latest employee sync metadata |
 | `goals_imports` | Shared goals CSV (latest upload; API writes with service role) |
 | `dashboard_permissions_config` | Role/page matrix from Admin → User management |
+| `audit_log` | Security audit events (logins, admin actions, data ops) |
 | `performance_records` | Legacy plaintext schema (unused by API; prefer encrypted cache) |
 | `profiles` | Optional link to Supabase Auth users |
 | `saved_metric_views` | Per-user saved explore views |
@@ -125,13 +127,14 @@ Do **not** commit `SUPABASE_SERVICE_ROLE_KEY` to git.
 
 ## 8. Go-live checklist
 
-- [ ] All migrations through `00010_dashboard_permissions_config.sql` run in SQL Editor  
+- [ ] All migrations through `00015_rls_auto_enable_lockdown.sql` run in SQL Editor  
 - [ ] `PERFORMANCE_DATA_ENCRYPTION_KEY` set on production host  
 - [ ] `npm run cache:warm` after first deploy (or when Revolut data changes)  
 - [ ] Seed admin user (`dashboard_users`)  
 - [ ] `SUPABASE_*` set on production host  
 - [ ] `APP_URL` + Google redirect = production domain  
 - [ ] `VITE_BYPASS_AUTH=false` and **rebuild** frontend  
-- [ ] `/api/health` shows `supabase: true`, `accessStorage: supabase`  
+- [ ] `/api/health/detail` (admin) shows `supabase: true`, `accessStorage: supabase`  
+- [ ] `/api/health` (public) returns `{ "ok": true }` only  
 - [ ] Test Google login + Admin → Access add user  
 - [ ] `npm run cache:warm` on server for Revolut data  

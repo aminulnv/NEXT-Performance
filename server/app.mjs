@@ -53,7 +53,7 @@ import {
   filterEmployeesForUser,
   filterGoalsForUser,
 } from './departmentScope.mjs'
-import { getEmployeesDirectoryFromCache } from './employeeLookup.mjs'
+import { resolveEmployeesDirectoryForScope } from './employeeDirectoryForScope.mjs'
 import {
   apiRateLimit,
   csvUploadRateLimit,
@@ -377,9 +377,8 @@ function scopedEmployeesPayload(employees, user, meta) {
   }
 }
 
-function scopedGoalsPayload(data, user) {
-  const employees = getEmployeesDirectoryFromCache()
-  const goals = filterGoalsForUser(data.goals, employees, user)
+function scopedGoalsPayload(data, user, employees) {
+  const goals = filterGoalsForUser(data.goals ?? [], employees, user)
   return {
     goals,
     columns: data.columns,
@@ -465,8 +464,9 @@ app.get('/api/cron/warm-cache', asyncHandler(async (req, res) => {
 
 app.get('/api/goals', requireAuth, requireGoalsRead, asyncHandler(async (req, res) => {
   const data = await loadGoalsDataset()
+  const employees = await resolveEmployeesDirectoryForScope()
   sendPrivateCache(res)
-  res.json(scopedGoalsPayload(data, req.user))
+  res.json(scopedGoalsPayload(data, req.user, employees))
 }))
 
 app.post('/api/goals', requireAuth, csvUploadRateLimit, asyncHandler(async (req, res) => {

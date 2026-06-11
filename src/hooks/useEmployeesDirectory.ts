@@ -45,22 +45,29 @@ function useLocalEmployeesDirectory(enabled: boolean) {
     }
   }, [enabled])
 
+  const forceReload = useCallback(() => reload(true), [reload])
+
   useEffect(() => {
     if (!enabled) return
     reload(false)
   }, [enabled, reload])
 
-  return { ...state, reload: () => reload(true) }
+  return { ...state, reload: forceReload }
 }
 
 export function useEmployeesDirectory() {
   const data = useOptionalDataContext()
   const local = useLocalEmployeesDirectory(!data)
+  const contextReloadEmployees = data?.reloadEmployees
+
+  const reloadFromContext = useCallback(() => {
+    void contextReloadEmployees?.(true)
+  }, [contextReloadEmployees])
 
   if (data) {
     return {
       ...data.employees,
-      reload: () => data.reloadEmployees(true),
+      reload: reloadFromContext,
     }
   }
 
