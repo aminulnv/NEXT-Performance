@@ -7,6 +7,7 @@ import { filterActiveEmployees } from '@/lib/activeEmployees'
 import { GoalsCsvUpload } from '@/components/goals/GoalsCsvUpload'
 import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
+import { FilterMultiSelect } from '@/components/performance/FilterMultiSelect'
 import { StatCard } from '@/components/performance/StatCard'
 import { paginate, TablePagination } from '@/components/performance/TablePagination'
 import { ScrollableTableViewport } from '@/components/performance/ScrollableTableViewport'
@@ -38,6 +39,8 @@ import {
   employeeToFlagPersonRow,
   managerPendingToFlagPersonRow,
   managerTeamToFlagPersonRow,
+  resolveDirectoryEmployeeCountry,
+  sortMonitoringCountryLabels,
 } from '@/lib/goalOwnerProfiles'
 import type { EmployeeGoalStatus, GoalBreakdownRow } from '@/lib/goalsMonitoring'
 import { PersonAvatar } from '@/components/performance/PersonAvatar'
@@ -58,6 +61,15 @@ function filterFlagPersonRows(rows: FlagPersonRow[], query: string): FlagPersonR
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
+    return hay.includes(q)
+  })
+}
+
+function filterBreakdownRows(rows: GoalBreakdownRow[], query: string): GoalBreakdownRow[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return rows
+  return rows.filter((row) => {
+    const hay = [row.label, row.key].filter(Boolean).join(' ').toLowerCase()
     return hay.includes(q)
   })
 }
@@ -427,56 +439,98 @@ function SubmissionBreakdownTable({
   title,
   rows,
   showRowAvatar = false,
+  className,
+  searchPlaceholder = 'Search name, department, manager…',
 }: {
   title: string
   rows: GoalBreakdownRow[]
   showRowAvatar?: boolean
+  className?: string
+  searchPlaceholder?: string
 }) {
+  const searchInputId = useId()
+  const [search, setSearch] = useState('')
+  const filteredRows = useMemo(() => filterBreakdownRows(rows, search), [rows, search])
+  const searchActive = search.trim().length > 0
+
   return (
-    <Panel title={title} count={rows.length}>
+    <Panel
+      title={title}
+      count={searchActive ? filteredRows.length : rows.length}
+      className={className}
+    >
       {rows.length === 0 ? (
         <p className="pd-page-subtitle" style={{ margin: 0 }}>
           No data for this breakdown.
         </p>
       ) : (
-        <ScrollableTableViewport label={title}>
-          <table className="pd-table pd-table--compact">
-            <thead>
-              <tr>
-                <th>Group</th>
-                <th>Employees</th>
-                <th>Submitted</th>
-                <th>Not started</th>
-                <th>Awaiting approval</th>
-                <th>Approved</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.key}>
-                  <td>
-                    {showRowAvatar ? (
-                      <PersonWithAvatar
-                        name={row.label}
-                        avatarUrl={row.avatarUrl ?? null}
-                        size={24}
-                      />
-                    ) : (
-                      row.label
-                    )}
-                  </td>
-                  <td>{row.totalEmployees}</td>
-                  <td>
-                    {row.submittedCount} ({row.submittedPct}%)
-                  </td>
-                  <td>{row.pendingSubmissionCount}</td>
-                  <td>{row.awaitingApprovalCount}</td>
-                  <td>{row.approvedCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollableTableViewport>
+        <>
+          <div className="pd-flag-panel-search">
+            <label className="pd-sr-only" htmlFor={searchInputId}>
+              Search {title}
+            </label>
+            <input
+              id={searchInputId}
+              className="pd-input"
+              type="search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {filteredRows.length === 0 ? (
+            <p className="pd-page-subtitle" style={{ margin: 0 }}>
+              No matches for your search.
+            </p>
+          ) : (
+            <ScrollableTableViewport label={title}>
+              <table className="pd-table pd-table--compact pd-table--breakdown">
+                <colgroup>
+                  <col className="pd-breakdown-col__group" />
+                  <col className="pd-breakdown-col__metric" />
+                  <col className="pd-breakdown-col__metric" />
+                  <col className="pd-breakdown-col__metric" />
+                  <col className="pd-breakdown-col__metric" />
+                  <col className="pd-breakdown-col__metric" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th>Employees</th>
+                    <th>Submitted</th>
+                    <th>Not started</th>
+                    <th>Awaiting approval</th>
+                    <th>Approved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>
+                        {showRowAvatar ? (
+                          <PersonWithAvatar
+                            name={row.label}
+                            avatarUrl={row.avatarUrl ?? null}
+                            size={24}
+                          />
+                        ) : (
+                          row.label
+                        )}
+                      </td>
+                      <td>{row.totalEmployees}</td>
+                      <td>
+                        {row.submittedCount} ({row.submittedPct}%)
+                      </td>
+                      <td>{row.pendingSubmissionCount}</td>
+                      <td>{row.awaitingApprovalCount}</td>
+                      <td>{row.approvedCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollableTableViewport>
+          )}
+        </>
       )}
     </Panel>
   )
@@ -527,13 +581,15 @@ function Panel({
   title,
   count,
   children,
+  className,
 }: {
   title: string
   count?: number
   children: ReactNode
+  className?: string
 }) {
   return (
-    <div className="pd-panel pd-flag-panel">
+    <div className={['pd-panel pd-flag-panel', className].filter(Boolean).join(' ')}>
       <h3 className="pd-panel-title">
         <span>{title}</span>
         {count != null ? (
@@ -545,8 +601,18 @@ function Panel({
   )
 }
 
-function FlagPanelGrid({ children }: { children: ReactNode }) {
-  return <div className="pd-flag-grid">{children}</div>
+function FlagPanelGrid({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return <div className={className ? `pd-flag-grid ${className}` : 'pd-flag-grid'}>{children}</div>
+}
+
+function BreakdownPanelGrid({ children }: { children: ReactNode }) {
+  return <div className="pd-breakdown-grid">{children}</div>
 }
 
 function Section({
@@ -608,6 +674,7 @@ export default function MonitoringPage() {
   }, [perfCycles, goalCycles])
 
   const [reviewCycleFilter, setReviewCycleFilter] = useState('Q2 2026')
+  const [countryFilter, setCountryFilter] = useState<string[]>([])
   const [devSearch, setDevSearch] = useState('')
   const [devDeptFilter, setDevDeptFilter] = useState('')
   const [devCycleFilter, setDevCycleFilter] = useState('')
@@ -637,6 +704,24 @@ export default function MonitoringPage() {
     [records, directoryEmployees],
   )
 
+  const countryOptions = useMemo(() => {
+    const labels = new Set<string>()
+    for (const employee of activeRoster) {
+      labels.add(resolveDirectoryEmployeeCountry(employee, ownerProfileLookup))
+    }
+    return sortMonitoringCountryLabels([...labels]).map((label) => ({
+      value: label,
+      label,
+    }))
+  }, [activeRoster, ownerProfileLookup])
+
+  const filteredRoster = useMemo(() => {
+    if (countryFilter.length === 0) return activeRoster
+    return activeRoster.filter((employee) =>
+      countryFilter.includes(resolveDirectoryEmployeeCountry(employee, ownerProfileLookup)),
+    )
+  }, [activeRoster, countryFilter, ownerProfileLookup])
+
   const selectedCycleHasGoals = useMemo(() => {
     if (!reviewCycleFilter) return true
     return goals.some((goal) => goalMatchesReviewCycle(goal, reviewCycleFilter))
@@ -650,7 +735,7 @@ export default function MonitoringPage() {
         calendarYear: quarterSelected ? calendarYear : null,
         performanceRecords: records,
         ownerProfileLookup,
-        activeRoster,
+        activeRoster: filteredRoster,
       }),
     [
       goals,
@@ -660,7 +745,7 @@ export default function MonitoringPage() {
       calendarYear,
       quarterSelected,
       ownerProfileLookup,
-      activeRoster,
+      filteredRoster,
     ],
   )
 
@@ -707,9 +792,25 @@ export default function MonitoringPage() {
   const managerCompliance = goalsSummary.managerCompliance
 
   const exportStats = useMemo(() => {
-    const filteredGoals = reviewCycleFilter
+    let filteredGoals = reviewCycleFilter
       ? goals.filter((goal) => goalMatchesReviewCycle(goal, reviewCycleFilter))
       : goals
+
+    if (countryFilter.length > 0) {
+      const rosterScope = new Set<string>()
+      for (const employee of filteredRoster) {
+        rosterScope.add(employee.id)
+        const email = employee.email?.trim().toLowerCase()
+        if (email) rosterScope.add(email)
+      }
+      filteredGoals = filteredGoals.filter((goal) => {
+        const employeeId = goal.employee_id?.trim()
+        if (employeeId && rosterScope.has(employeeId)) return true
+        const owner = goal.owner?.trim().toLowerCase()
+        return owner ? rosterScope.has(owner) : false
+      })
+    }
+
     const uniqueGoalIds = new Set(
       filteredGoals.map((goal) => goal.goal_id?.trim() || goal.id).filter(Boolean),
     )
@@ -717,7 +818,7 @@ export default function MonitoringPage() {
       metricRows: filteredGoals.length,
       uniqueGoals: uniqueGoalIds.size,
     }
-  }, [goals, reviewCycleFilter])
+  }, [goals, reviewCycleFilter, countryFilter, filteredRoster])
 
   const goalsDetailsUrl = useMemo(() => {
     if (!reviewCycleFilter) return allGoalsDetailsUrl()
@@ -870,6 +971,15 @@ export default function MonitoringPage() {
               ))}
             </select>
           </div>
+          <FilterMultiSelect
+            id="monitoring-country-filter"
+            label="Country"
+            placeholder="All countries"
+            options={countryOptions}
+            selected={countryFilter}
+            onChange={setCountryFilter}
+            active={countryFilter.length > 0}
+          />
         </div>
       ) : null}
 
@@ -883,6 +993,11 @@ export default function MonitoringPage() {
             <EmptyState
               title="No active employees in directory"
               description="Sync the employee directory from Organization → People so monitoring uses the full active headcount as the denominator."
+            />
+          ) : filteredRoster.length === 0 ? (
+            <EmptyState
+              title="No employees match country filter"
+              description="Clear the country filter or choose different countries to restore the monitoring view."
             />
           ) : (
             <>
@@ -910,6 +1025,26 @@ export default function MonitoringPage() {
             }
           >
             <GoalSubmissionStatGrid goalsSummary={goalsSummary} exportStats={exportStats} />
+
+            <BreakdownPanelGrid>
+              <SubmissionBreakdownTable
+                title="By department"
+                rows={goalsSummary.breakdownByDepartment}
+                searchPlaceholder="Search department…"
+              />
+              <SubmissionBreakdownTable
+                title="By country"
+                rows={goalsSummary.breakdownByLocation}
+                searchPlaceholder="Search country…"
+              />
+              <SubmissionBreakdownTable
+                title="By manager"
+                rows={goalsSummary.breakdownByManager}
+                showRowAvatar
+                className="pd-breakdown-grid__full"
+                searchPlaceholder="Search manager…"
+              />
+            </BreakdownPanelGrid>
 
             <FlagPanelGrid>
               <FlagPanel
@@ -1019,24 +1154,6 @@ export default function MonitoringPage() {
                 rows={managersPendingOver5DaysRows}
                 showPendingGoalCount
                 showOldestPendingDays
-              />
-            </FlagPanelGrid>
-          </Section>
-
-          <Section title="Breakdown">
-            <FlagPanelGrid>
-              <SubmissionBreakdownTable
-                title="By department"
-                rows={goalsSummary.breakdownByDepartment}
-              />
-              <SubmissionBreakdownTable
-                title="By location"
-                rows={goalsSummary.breakdownByLocation}
-              />
-              <SubmissionBreakdownTable
-                title="By manager"
-                rows={goalsSummary.breakdownByManager}
-                showRowAvatar
               />
             </FlagPanelGrid>
           </Section>

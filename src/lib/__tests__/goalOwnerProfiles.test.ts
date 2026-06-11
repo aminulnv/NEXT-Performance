@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGoalOwnerProfileLookup,
   buildLineManagerLookup,
+  enrichGoalOwnerProfileLookup,
+  extractLocationLabel,
   employeeToFlagPersonRow,
   managerPendingToFlagPersonRow,
+  formatEmployeeCountry,
+  normalizeEmployeeLocation,
+  resolveDirectoryEmployeeCountry,
   resolveLineManagerForOwner,
+  sortMonitoringCountryLabels,
 } from '@/lib/goalOwnerProfiles'
+import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { EmployeeGoalStatus } from '@/lib/goalsMonitoring'
 import type { PerformanceRecord } from '@/types/performance'
 
@@ -31,6 +38,115 @@ function employee(partial: Partial<EmployeeGoalStatus>): EmployeeGoalStatus {
     ...partial,
   }
 }
+
+describe('extractLocationLabel', () => {
+  it('reads location name from Revolut object payloads', () => {
+    expect(extractLocationLabel({ name: 'Malaysia Office' })).toBe('Malaysia Office')
+    expect(extractLocationLabel('[object Object]')).toBeNull()
+  })
+
+  it('normalizes known office labels to full country names', () => {
+    expect(normalizeEmployeeLocation('Malaysia Office')).toBe('Malaysia')
+    expect(normalizeEmployeeLocation({ name: 'Sri Lanka' })).toBe('Sri Lanka')
+    expect(normalizeEmployeeLocation('BD')).toBe('Bangladesh')
+  })
+})
+
+describe('resolveDirectoryEmployeeCountry', () => {
+  const directoryEntry: EmployeeDirectoryEntry = {
+    id: 'emp-1',
+    remoteId: null,
+    name: 'Alice',
+    fullName: 'Alice',
+    firstName: null,
+    middleName: null,
+    lastName: null,
+    email: 'alice@co.com',
+    avatar: null,
+    department: null,
+    team: null,
+    location: 'Malaysia Office',
+    entity: null,
+    joiningDateTime: null,
+    terminationDateTime: null,
+    updatedDateTime: null,
+    status: 'active',
+    inactivityReason: null,
+    specialisation: null,
+    seniority: null,
+    candidateId: null,
+    lineManagerId: null,
+    lineManagerName: null,
+    lineManagerEmail: null,
+  }
+
+  it('normalizes directory location to country label', () => {
+    expect(resolveDirectoryEmployeeCountry(directoryEntry)).toBe('Malaysia')
+    expect(formatEmployeeCountry(directoryEntry)).toBe('Malaysia')
+  })
+
+  it('sorts known countries before other labels', () => {
+    expect(
+      sortMonitoringCountryLabels(['London', 'Malaysia', 'Unknown', 'Sri Lanka']),
+    ).toEqual(['Malaysia', 'Sri Lanka', 'Unknown', 'London'])
+  })
+})
+
+describe('enrichGoalOwnerProfileLookup', () => {
+  it('replaces corrupted performance location with directory location', () => {
+    const records: PerformanceRecord[] = [
+      {
+        id: '1',
+        sync_run_id: null,
+        grade_record_id: null,
+        employee_id: 'emp-1',
+        cycle_id: null,
+        employee_name: 'Alice',
+        cycle_name: null,
+        department: null,
+        team: null,
+        display_grade: null,
+        line_manager_grade: null,
+        calculated_grade: null,
+        absolute_rating: null,
+        ranking_score: null,
+        payload: { 'Employee Location': { name: 'Malaysia Office' } },
+        synced_at: '2026-01-01',
+      },
+    ]
+    const directory: EmployeeDirectoryEntry[] = [
+      {
+        id: 'emp-1',
+        remoteId: null,
+        name: 'Alice',
+        fullName: 'Alice',
+        firstName: null,
+        middleName: null,
+        lastName: null,
+        email: 'alice@co.com',
+        avatar: null,
+        department: null,
+        team: null,
+        location: 'Sri Lanka',
+        entity: null,
+        joiningDateTime: null,
+        terminationDateTime: null,
+        updatedDateTime: null,
+        status: 'active',
+        inactivityReason: null,
+        specialisation: null,
+        seniority: null,
+        candidateId: null,
+        lineManagerId: null,
+        lineManagerName: null,
+        lineManagerEmail: null,
+      },
+    ]
+
+    const lookup = enrichGoalOwnerProfileLookup(buildGoalOwnerProfileLookup(records), directory)
+    expect(lookup.byEmployeeId.get('emp-1')?.location).toBe('Sri Lanka')
+  })
+})
 
 describe('employeeToFlagPersonRow', () => {
   it('uses performance department and avatar when matched by employee id', () => {

@@ -442,7 +442,7 @@ function buildRow(g) {
     'Employee Department ID': departmentId(emp),
     'Employee Team': employeeTeam(emp),
     'Employee Team ID': teamId(emp),
-    'Employee Location': str(emp?.location),
+    'Employee Location': nestedField(emp, 'location'),
     'Employee Seniority': nestedField(emp, 'seniority'),
     'Employee Specialisation': nestedField(emp, 'specialisation'),
     'Employee Status': employeeStatus(emp),

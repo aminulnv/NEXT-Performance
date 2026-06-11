@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
+import { formatEmployeeCountry } from '@/lib/goalOwnerProfiles'
 import { routes } from '@/lib/routes'
 import '@/styles/performance.css'
 
@@ -22,15 +23,21 @@ export default function PeoplePage() {
   const { employees, count, loading, error, fetchedAt, source, reload } = useEmployeesDirectory()
   const [search, setSearch] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
   const departments = useMemo(() => uniqueValues(employees.map((e) => e.department)), [employees])
+  const locations = useMemo(
+    () => uniqueValues(employees.map((e) => formatEmployeeCountry(e))),
+    [employees],
+  )
   const statuses = useMemo(() => uniqueValues(employees.map((e) => e.status)), [employees])
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
     return employees.filter((employee) => {
       if (departmentFilter && employee.department !== departmentFilter) return false
+      if (locationFilter && formatEmployeeCountry(employee) !== locationFilter) return false
       if (statusFilter && employee.status !== statusFilter) return false
       if (!query) return true
       const haystack = [
@@ -41,7 +48,7 @@ export default function PeoplePage() {
         employee.lineManagerName,
         employee.seniority,
         employee.specialisation,
-        employee.location,
+        formatEmployeeCountry(employee),
         employee.status,
       ]
         .filter(Boolean)
@@ -49,7 +56,7 @@ export default function PeoplePage() {
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [employees, search, departmentFilter, statusFilter])
+  }, [employees, search, departmentFilter, locationFilter, statusFilter])
 
   if (loading) return <LoadingState />
   if (error) return <div className="pd-alert">{error}</div>
@@ -113,6 +120,24 @@ export default function PeoplePage() {
           </select>
         </div>
         <div className="pd-form-row">
+          <label className="pd-label" htmlFor="people-location">
+            Country
+          </label>
+          <select
+            id="people-location"
+            className="pd-select"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+          >
+            <option value="">All countries</option>
+            {locations.map((location) => (
+              <option key={location} value={location}>
+                {location}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="pd-form-row">
           <label className="pd-label" htmlFor="people-status">
             Status
           </label>
@@ -140,6 +165,7 @@ export default function PeoplePage() {
               <th>Email</th>
               <th>Department</th>
               <th>Team</th>
+              <th>Country</th>
               <th>Line manager</th>
               <th>Joining date</th>
               <th>Seniority</th>
@@ -150,7 +176,7 @@ export default function PeoplePage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', color: '#6b7280' }}>
+                <td colSpan={10} style={{ textAlign: 'center', color: '#6b7280' }}>
                   No employees match filters.
                 </td>
               </tr>
@@ -165,6 +191,7 @@ export default function PeoplePage() {
                   <td>{employee.email || '—'}</td>
                   <td>{employee.department || '—'}</td>
                   <td>{employee.team || '—'}</td>
+                  <td>{formatEmployeeCountry(employee) ?? '—'}</td>
                   <td>{employee.lineManagerName || '—'}</td>
                   <td>{formatDate(employee.joiningDateTime)}</td>
                   <td>{employee.seniority || '—'}</td>

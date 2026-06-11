@@ -487,10 +487,8 @@ describe('buildGoalsMonitoringSummary', () => {
     })
 
     expect(summary.totalOwners).toBe(1)
-    expect(summary.submissionCounts.submitted.count).toBe(1)
-    expect(summary.submitted).toHaveLength(1)
-    expect(summary.submitted[0].ownerFullName).toBe('SM Fahim')
-    expect(summary.submitted[0].exportOnly).toBe(true)
+    expect(summary.submissionCounts.submitted.count).toBe(0)
+    expect(summary.submitted).toHaveLength(0)
     expect(summary.notSubmitted).toHaveLength(1)
     expect(summary.notSubmitted[0].ownerFullName).toBe('Someone Else')
   })
@@ -918,7 +916,54 @@ describe('buildSubmissionBreakdown', () => {
     expect(summary.totalOwners).toBe(1)
   })
 
-  it('normalizes location breakdown to MY, SL, Cyprus, and BD', () => {
+  it('scopes submission metrics to the active roster when country-filtered', () => {
+    const goals: GoalRecord[] = [
+      goal({
+        id: 'a1',
+        goal_id: '10',
+        owner: 'alice@co.com',
+        employee_id: 'emp-a',
+        title: 'Goal A',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'approved',
+        review_cycle: 'Q2 2026',
+      }),
+      goal({
+        id: 'b1',
+        goal_id: '11',
+        owner: 'bob@co.com',
+        employee_id: 'emp-b',
+        title: 'Goal B',
+        organisation_unit: 'Employee Kpi',
+        approval_status: 'pending',
+        review_cycle: 'Q2 2026',
+      }),
+    ]
+
+    const summary = buildGoalsMonitoringSummary(goals, {
+      cycleFilter: 'Q2 2026',
+      calendarQuarter: 2,
+      calendarYear: 2026,
+      activeRoster: [
+        roster({
+          id: 'emp-a',
+          email: 'alice@co.com',
+          location: 'Malaysia Office',
+          joiningDateTime: '2025-01-01',
+        }),
+      ],
+    })
+
+    expect(summary.totalOwners).toBe(1)
+    expect(summary.submissionCounts.submitted.count).toBe(1)
+    expect(summary.submissionCounts.submitted.pct).toBe(100)
+    expect(summary.submissionCounts.pendingSubmission.count).toBe(0)
+    expect(summary.submissionCounts.awaitingApproval.count).toBe(0)
+    expect(summary.submitted).toHaveLength(1)
+    expect(summary.submitted[0].employeeId).toBe('emp-a')
+  })
+
+  it('normalizes location breakdown to full country names', () => {
     const goals: GoalRecord[] = [
       goal({
         id: 'a1',
@@ -963,6 +1008,6 @@ describe('buildSubmissionBreakdown', () => {
     })
 
     const labels = summary.breakdownByLocation.map((row) => row.label).sort()
-    expect(labels).toEqual(['MY', 'SL'])
+    expect(labels).toEqual(['Malaysia', 'Sri Lanka'])
   })
 })

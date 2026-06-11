@@ -32,6 +32,16 @@ import '@/styles/performance.css'
 const DEFAULT_CYCLE_FILTER = 'Q2 2026'
 const DEFAULT_APPROVAL_STATUS_KEYS = ['approved', 'pending'] as const
 
+const HIDDEN_GOAL_TABLE_COLUMNS = new Set([
+  'progress',
+  'means of measure',
+  'target value',
+])
+
+function normalizeGoalTableColumn(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
 function resolveDefaultApprovalFilter(statuses: string[]): string[] {
   return DEFAULT_APPROVAL_STATUS_KEYS.map((key) =>
     statuses.find((status) => status.toLowerCase() === key),
@@ -228,7 +238,10 @@ export default function GoalsPage() {
     const mapped = new Set(
       Object.values(dataset?.columnMap ?? {}).filter((v): v is string => Boolean(v)),
     )
-    return cols.filter((c) => !mapped.has(c)).slice(0, 4)
+    return cols
+      .filter((c) => !mapped.has(c))
+      .filter((c) => !HIDDEN_GOAL_TABLE_COLUMNS.has(normalizeGoalTableColumn(c)))
+      .slice(0, 4)
   }, [dataset])
 
   async function onFileUpload(file: File) {
@@ -389,7 +402,7 @@ export default function GoalsPage() {
                 <th>Employee</th>
                 <th>Cycle</th>
                 <th>Status</th>
-                <th>Progress</th>
+                <th>Approval status</th>
                 {extraColumns.map((col) => (
                   <th key={col}>{col}</th>
                 ))}
@@ -430,7 +443,9 @@ export default function GoalsPage() {
                   <td>
                     <GoalStatusChip status={g.status} />
                   </td>
-                  <td>{g.progress ?? '—'}</td>
+                  <td>
+                    <GoalStatusChip status={g.approval_status} />
+                  </td>
                   {extraColumns.map((col) => (
                     <td key={col}>{g.fields?.[col] || '—'}</td>
                   ))}

@@ -3,6 +3,14 @@ import { reviewCyclesMatch } from '@/lib/calendarQuarters'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { PerformanceRecord } from '@/types/performance'
 
+export const MONITORING_COUNTRY_ORDER = [
+  'Malaysia',
+  'Sri Lanka',
+  'Cyprus',
+  'Bangladesh',
+  'Unknown',
+] as const
+
 export type FlagPersonRow = {
   id: string
   employeeId: string | null
@@ -52,6 +60,31 @@ function payloadStr(payload: Record<string, unknown>, key: string): string | nul
   return s || null
 }
 
+/** Extract a display label from Revolut location values (string or `{ name }` object). */
+export function extractLocationLabel(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === '[object Object]') return null
+    return trimmed
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of ['name', 'label', 'display_name', 'title']) {
+      const nested = record[key]
+      if (typeof nested === 'string' && nested.trim()) return nested.trim()
+    }
+  }
+  return null
+}
+
+function mergeLocation(
+  existing: string | null | undefined,
+  incoming: string | null | undefined,
+): string | null {
+  return extractLocationLabel(incoming) ?? extractLocationLabel(existing) ?? null
+}
+
 export function buildGoalOwnerProfileLookup(
   records: PerformanceRecord[],
 ): GoalOwnerProfileLookup {
@@ -62,7 +95,7 @@ export function buildGoalOwnerProfileLookup(
     const profile: OwnerProfile = {
       department: r.department,
       avatarUrl: payloadStr(r.payload, 'Employee Avatar URL'),
-      location: payloadStr(r.payload, 'Employee Location'),
+      location: extractLocationLabel(r.payload['Employee Location']),
     }
     if (r.employee_id) {
       const existing = byEmployeeId.get(r.employee_id)
@@ -96,14 +129,17 @@ export function enrichGoalOwnerProfileLookup(
   const merge = (existing: OwnerProfile | undefined, incoming: OwnerProfile): OwnerProfile => ({
     department: existing?.department ?? incoming.department,
     avatarUrl: existing?.avatarUrl ?? incoming.avatarUrl,
-    location: existing?.location ?? incoming.location,
+    location: mergeLocation(existing?.location, incoming.location),
   })
 
   for (const employee of directory) {
     const profile: OwnerProfile = {
       department: employee.department?.trim() || null,
       avatarUrl: employee.avatar?.trim() || null,
-      location: employee.location?.trim() || null,
+      location:
+        extractLocationLabel(employee.location) ??
+        extractLocationLabel(employee.profile?.location) ??
+        null,
     }
     if (employee.id) {
       byEmployeeId.set(employee.id, merge(byEmployeeId.get(employee.id), profile))
@@ -135,14 +171,51 @@ export function resolveProfileAvatar(
   return null
 }
 
-export function normalizeEmployeeLocation(raw: string | null | undefined): string {
-  if (!raw?.trim()) return 'Unknown'
-  const s = raw.trim().toLowerCase()
-  if (s.includes('malaysia') || s === 'my') return 'MY'
-  if (s.includes('sri lanka') || s === 'sl') return 'SL'
+export function normalizeEmployeeLocation(raw: string | null | undefined | unknown): string {
+  const label = extractLocationLabel(raw)
+  if (!label) return 'Unknown'
+  const s = label.toLowerCase()
+  if (s.includes('malaysia') || s === 'my') return 'Malaysia'
+  if (s.includes('sri lanka') || s === 'sl') return 'Sri Lanka'
   if (s.includes('cyprus')) return 'Cyprus'
-  if (s.includes('bangladesh') || s === 'bd') return 'BD'
-  return raw.trim()
+  if (s.includes('bangladesh') || s === 'bd') return 'Bangladesh'
+  return label
+}
+
+/** Country label for display and filters; returns null when location is missing. */
+export function formatEmployeeCountry(
+  employee: EmployeeDirectoryEntry,
+  lookup?: GoalOwnerProfileLookup,
+): string | null {
+  const country = resolveDirectoryEmployeeCountry(employee, lookup)
+  return country === 'Unknown' ? null : country
+}
+
+export function sortMonitoringCountryLabels(labels: string[]): string[] {
+  return [...labels].sort((a, b) => {
+    const ai = MONITORING_COUNTRY_ORDER.indexOf(a as (typeof MONITORING_COUNTRY_ORDER)[number])
+    const bi = MONITORING_COUNTRY_ORDER.indexOf(b as (typeof MONITORING_COUNTRY_ORDER)[number])
+    if (ai !== -1 && bi !== -1) return ai - bi
+    if (ai !== -1) return -1
+    if (bi !== -1) return 1
+    return a.localeCompare(b, undefined, { sensitivity: 'base' })
+  })
+}
+
+export function resolveDirectoryEmployeeCountry(
+  employee: EmployeeDirectoryEntry,
+  lookup?: GoalOwnerProfileLookup,
+): string {
+  const emailKey = employee.email?.trim().toLowerCase()
+  const fromLookup =
+    lookup?.byEmployeeId.get(employee.id)?.location ??
+    (emailKey ? lookup?.byEmail.get(emailKey)?.location : null)
+  const raw =
+    extractLocationLabel(fromLookup) ??
+    extractLocationLabel(employee.location) ??
+    extractLocationLabel(employee.profile?.location) ??
+    null
+  return normalizeEmployeeLocation(raw)
 }
 
 export function resolveOwnerLocation(

@@ -11,6 +11,7 @@ import {
 } from '@/lib/calendarQuarters'
 import {
   buildLineManagerLookup,
+  extractLocationLabel,
   normalizeEmployeeLocation,
   resolveLineManagerForOwner,
   resolveOwnerLocation,
@@ -915,7 +916,11 @@ export function buildEmployeeGoalStatuses(
           (employee.email
             ? (options.locationByEmployeeId?.get(employee.email.trim().toLowerCase()) ?? null)
             : null)
-        const location = locationFromPerf ?? employee.location ?? null
+        const location =
+          extractLocationLabel(locationFromPerf) ??
+          extractLocationLabel(employee.location) ??
+          extractLocationLabel(employee.profile?.location) ??
+          null
 
         return employeeGoalStatusFromGoals(ownerKey, ownerGoals, {
           employeeId: employee.id,
@@ -995,18 +1000,20 @@ export function buildGoalsMonitoringSummary(
     calendarYear: options.calendarYear ?? null,
   })
   const rosterEmployees = employees.filter((employee) => !employee.exportOnly)
-  const total = rosterEmployees.length || 1
+  /** When a People roster is in scope, metrics use roster rows only (not export-only goal owners). */
+  const scopedEmployees = options.activeRoster?.length ? rosterEmployees : employees
+  const total = scopedEmployees.length || 1
 
-  const submittedEmployees = employees.filter((e) => e.submitted)
-  const fullyApproved = employees.filter((e) => e.submitted && e.fullyApproved)
-  const awaitingApprovalEmployees = employees.filter(
+  const submittedEmployees = scopedEmployees.filter((e) => e.submitted)
+  const fullyApproved = scopedEmployees.filter((e) => e.submitted && e.fullyApproved)
+  const awaitingApprovalEmployees = scopedEmployees.filter(
     (e) => e.submitted && e.hasPendingApproval && !e.fullyApproved,
   )
-  const withProgress = employees.filter((e) => e.submitted && e.hasProgressUpdate)
+  const withProgress = scopedEmployees.filter((e) => e.submitted && e.hasProgressUpdate)
 
-  const notSubmitted = rosterEmployees.filter((e) => !e.submitted)
-  const submittedNotApproved = employees.filter((e) => e.submitted && !e.fullyApproved)
-  const lowProgressUpdates = employees.filter((e) => e.submitted && !e.hasProgressUpdate)
+  const notSubmitted = scopedEmployees.filter((e) => !e.submitted)
+  const submittedNotApproved = scopedEmployees.filter((e) => e.submitted && !e.fullyApproved)
+  const lowProgressUpdates = scopedEmployees.filter((e) => e.submitted && !e.hasProgressUpdate)
 
   const calendarQuarter = options.calendarQuarter ?? null
   const calendarYear = options.calendarYear ?? null
@@ -1035,12 +1042,12 @@ export function buildGoalsMonitoringSummary(
 
   const managerCompliance = buildManagerComplianceMetrics(
     goals,
-    employees,
+    scopedEmployees,
     cycleFilter,
     ref,
   )
 
-  const breakdownByDepartment = buildSubmissionBreakdownByKey(employees, (employee) => {
+  const breakdownByDepartment = buildSubmissionBreakdownByKey(scopedEmployees, (employee) => {
     const dept = employee.department?.trim()
     if (dept) return dept
     if (ownerProfileLookup) {
@@ -1050,11 +1057,11 @@ export function buildGoalsMonitoringSummary(
     return 'Unknown'
   })
 
-  const breakdownByLocation = buildSubmissionBreakdownByKey(employees, (employee) =>
+  const breakdownByLocation = buildSubmissionBreakdownByKey(scopedEmployees, (employee) =>
     resolveEmployeeLocation(employee, ownerProfileLookup),
   )
 
-  const breakdownByManager = buildManagerSubmissionBreakdown(employees, ownerProfileLookup)
+  const breakdownByManager = buildManagerSubmissionBreakdown(scopedEmployees, ownerProfileLookup)
 
   const lowSubmissionDepartments = breakdownByDepartment
     .filter((row) => row.totalEmployees >= 3 && row.submittedPct < 60)
@@ -1071,7 +1078,7 @@ export function buildGoalsMonitoringSummary(
     calendarYear,
     quarterStartDate: quarterStart,
     quarterDay,
-    totalOwners: rosterEmployees.length,
+    totalOwners: scopedEmployees.length,
     submissionRatePct: pct(submittedEmployees.length, total),
     approvalRatePct: pct(fullyApproved.length, total),
     progressUpdateRatePct: pct(withProgress.length, total),
@@ -1108,11 +1115,22 @@ export function resolveEmployeeLocation(
   employee: EmployeeGoalStatus,
   lookup?: GoalOwnerProfileLookup,
 ): string {
-  if (employee.location?.trim()) {
-    return normalizeEmployeeLocation(employee.location)
-  }
-  if (lookup) return resolveOwnerLocation(employee, lookup)
+  const fromEmployee =
+    extractLocationLabel(employee.location) ??
+    (lookup ? extractLocationLabel(resolveOwnerLocationRaw(employee, lookup)) : null)
+  if (fromEmployee) return normalizeEmployeeLocation(fromEmployee)
   return 'Unknown'
+}
+
+function resolveOwnerLocationRaw(
+  employee: EmployeeGoalStatus,
+  lookup: GoalOwnerProfileLookup,
+): string | null {
+  const emailKey = employee.owner.trim().toLowerCase()
+  const fromPerf =
+    (employee.employeeId ? lookup.byEmployeeId.get(employee.employeeId) : undefined) ??
+    lookup.byEmail.get(emailKey)
+  return fromPerf?.location ?? null
 }
 
 function employeeDepartmentLabel(
