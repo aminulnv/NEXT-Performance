@@ -15,6 +15,7 @@ import {
   type PermissionsConfig,
 } from '@/lib/permissions'
 import permissionsJson from '@/config/permissions.json'
+import { migratePermissionsConfig } from '@/lib/permissionsMigrate'
 
 type PermissionsContextValue = {
   ready: boolean
@@ -54,7 +55,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchPermissions()
       const { source: storageSource, ...config } = data
-      setActivePermissionsConfig(config)
+      setActivePermissionsConfig(migratePermissionsConfig(config))
       setSource(storageSource === 'supabase' || storageSource === 'file' ? storageSource : 'bundled')
     } catch {
       setActivePermissionsConfig(bundledConfig)

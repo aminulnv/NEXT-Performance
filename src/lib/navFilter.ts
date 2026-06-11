@@ -3,8 +3,8 @@ import { pageKeyFromPathname } from '@/lib/permissions'
 
 const PATH_OVERRIDES: Record<string, string> = {
   '/organization': 'organization.departments',
-  '/performance': 'performance.records',
-  '/analytics': 'analytics.monitoring',
+  '/performance': 'performance.analytics',
+  '/goals': 'goals.analytics',
   '/admin': 'admin.settings',
 }
 

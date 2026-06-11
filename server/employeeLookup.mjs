@@ -87,6 +87,11 @@ export function mergeRevolutEmployeesDirectory(index) {
   mergeEmployeesDirectory?.(index)
 }
 
+export function getEmployeesDirectoryFromCache() {
+  const cache = getCacheSnapshot?.() ?? null
+  return cache?.employeesDirectory?.length ? cache.employeesDirectory : []
+}
+
 function employeesIndexFromCache(cache) {
   if (!cache) return null
   if (cache.employeesByEmail && Object.keys(cache.employeesByEmail).length > 0) {

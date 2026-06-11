@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { useGoalsData } from '@/hooks/useGoalsData'
 import { usePerformanceData } from '@/hooks/usePerformanceData'
 import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
@@ -26,6 +27,14 @@ import {
   employeeGoalsUrl,
   readGoalsFilters,
 } from '@/lib/goalsFilters'
+import { roleUsesDepartmentScope } from '@/lib/permissions'
+import {
+  buildGoalRosterIndex,
+  departmentOptionsFromRoster,
+  employeeMatchesRosterFilters,
+  goalMatchesRosterFilters,
+  teamOptionsFromRoster,
+} from '@/lib/rosterFilters'
 import { routes } from '@/lib/routes'
 import '@/styles/performance.css'
 
@@ -67,6 +76,10 @@ function uniqueGoalField(
 }
 
 export default function GoalsPage() {
+  const { role, user } = useAuth()
+  const scopedDepartments = user?.scopedDepartments ?? null
+  const hasDepartmentScope =
+    Boolean(role && roleUsesDepartmentScope(role) && scopedDepartments?.length)
   const { goals, dataset, loading, uploading, error, uploadCsv, reload } = useGoalsData()
   const { records, loading: perfLoading } = usePerformanceData()
   const {
@@ -92,6 +105,8 @@ export default function GoalsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [approvalFilter, setApprovalFilter] = useState<string[]>([])
   const [orgUnitFilter, setOrgUnitFilter] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([])
+  const [teamFilter, setTeamFilter] = useState<string[]>([])
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
 
   const cycles = useMemo(() => uniqueGoalField(goals, goalReviewCycle), [goals])
@@ -123,6 +138,18 @@ export default function GoalsPage() {
   const isStatusFilterActive = Boolean(statusFilter)
   const isApprovalFilterActive = approvalFilter.length > 0
   const isOrgUnitFilterActive = Boolean(orgUnitFilter)
+  const isDepartmentFilterActive = departmentFilter.length > 0
+  const isTeamFilterActive = teamFilter.length > 0
+
+  const rosterFilterState = useMemo(
+    () => ({
+      departments: departmentFilter,
+      teams: teamFilter,
+    }),
+    [departmentFilter, teamFilter],
+  )
+
+  const rosterFiltersActive = isDepartmentFilterActive || isTeamFilterActive
 
   const hasActiveFilters = Boolean(
     search.trim() ||
@@ -130,9 +157,61 @@ export default function GoalsPage() {
       statusFilter ||
       (approvalFilter.length > 0 && !approvalFiltersMatch(approvalFilter, defaultApprovalFilter)) ||
       orgUnitFilter ||
+      rosterFiltersActive ||
       employeeFilter ||
       ownerFilter,
   )
+
+  const activeRoster = useMemo(
+    () => filterActiveEmployees(directoryEmployees),
+    [directoryEmployees],
+  )
+
+  const goalRosterIndex = useMemo(() => buildGoalRosterIndex(activeRoster), [activeRoster])
+
+  const departmentOptions = useMemo(() => {
+    if (hasDepartmentScope && scopedDepartments?.length) {
+      return scopedDepartments.map((department) => ({ value: department, label: department }))
+    }
+    return departmentOptionsFromRoster(activeRoster, rosterFilterState)
+  }, [activeRoster, rosterFilterState, hasDepartmentScope, scopedDepartments])
+
+  const teamOptions = useMemo(
+    () => teamOptionsFromRoster(activeRoster, rosterFilterState),
+    [activeRoster, rosterFilterState],
+  )
+
+  useEffect(() => {
+    const valid = new Set(departmentOptions.map((option) => option.value))
+    setDepartmentFilter((current) => {
+      const next = current.filter((value) => valid.has(value))
+      return next.length === current.length ? current : next
+    })
+  }, [departmentOptions])
+
+  useEffect(() => {
+    const valid = new Set(teamOptions.map((option) => option.value))
+    setTeamFilter((current) => {
+      const next = current.filter((value) => valid.has(value))
+      return next.length === current.length ? current : next
+    })
+  }, [teamOptions])
+
+  function onDepartmentFilterChange(next: string[]) {
+    if (hasDepartmentScope && scopedDepartments?.length) {
+      const allowed = new Set(scopedDepartments)
+      setDepartmentFilter(next.filter((department) => allowed.has(department)))
+      return
+    }
+    setDepartmentFilter(next)
+  }
+
+  const filteredRoster = useMemo(() => {
+    if (!rosterFiltersActive) return activeRoster
+    return activeRoster.filter((employee) =>
+      employeeMatchesRosterFilters(employee, rosterFilterState),
+    )
+  }, [activeRoster, rosterFiltersActive, rosterFilterState])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -149,6 +228,7 @@ export default function GoalsPage() {
         }
       }
       if (orgUnitFilter && (g.organisation_unit ?? '') !== orgUnitFilter) return false
+      if (!goalMatchesRosterFilters(g, goalRosterIndex, rosterFilterState)) return false
       if (!q) return true
       const haystack = [
         g.employee_name,
@@ -168,12 +248,18 @@ export default function GoalsPage() {
         .toLowerCase()
       return haystack.includes(q)
     })
-  }, [goals, search, cycleFilter, statusFilter, approvalFilter, orgUnitFilter, employeeFilter, ownerFilter])
-
-  const activeRoster = useMemo(
-    () => filterActiveEmployees(directoryEmployees),
-    [directoryEmployees],
-  )
+  }, [
+    goals,
+    search,
+    cycleFilter,
+    statusFilter,
+    approvalFilter,
+    orgUnitFilter,
+    employeeFilter,
+    ownerFilter,
+    goalRosterIndex,
+    rosterFilterState,
+  ])
 
   const ownerProfileLookup = useMemo(
     () =>
@@ -197,7 +283,7 @@ export default function GoalsPage() {
         calendarYear: monitoringQuarter?.year ?? null,
         performanceRecords: records,
         ownerProfileLookup,
-        activeRoster,
+        activeRoster: filteredRoster,
       }),
     [
       goals,
@@ -205,14 +291,19 @@ export default function GoalsPage() {
       cycleFilter,
       monitoringQuarter,
       ownerProfileLookup,
-      activeRoster,
+      filteredRoster,
     ],
   )
 
   const exportStats = useMemo(() => {
-    const cycleGoals = cycleFilter
+    let cycleGoals = cycleFilter
       ? goals.filter((goal) => goalMatchesReviewCycle(goal, cycleFilter))
       : goals
+    if (rosterFiltersActive) {
+      cycleGoals = cycleGoals.filter((goal) =>
+        goalMatchesRosterFilters(goal, goalRosterIndex, rosterFilterState),
+      )
+    }
     const uniqueGoalIds = new Set(
       cycleGoals.map((goal) => goal.goal_id?.trim() || goal.id).filter(Boolean),
     )
@@ -220,7 +311,7 @@ export default function GoalsPage() {
       metricRows: cycleGoals.length,
       uniqueGoals: uniqueGoalIds.size,
     }
-  }, [goals, cycleFilter])
+  }, [goals, cycleFilter, rosterFiltersActive, goalRosterIndex, rosterFilterState])
 
   const clearFilters = () => {
     setSearch('')
@@ -228,6 +319,8 @@ export default function GoalsPage() {
     setStatusFilter('')
     setApprovalFilter(defaultApprovalFilter)
     setOrgUnitFilter('')
+    setDepartmentFilter([])
+    setTeamFilter([])
     if (employeeFilter || ownerFilter) {
       setSearchParams(clearEmployeeGoalsParams(searchParams), { replace: true })
     }
@@ -292,7 +385,7 @@ export default function GoalsPage() {
       )}
 
       {goals.length > 0 ? (
-        <div className="pd-filter-bar" style={{ marginBottom: '1rem' }}>
+        <div className="pd-filter-bar pd-filter-bar--compact" style={{ marginBottom: '1rem' }}>
           <div className="pd-form-row pd-filter-search">
             <label className="pd-label" htmlFor="goals-search">
               Search
@@ -352,6 +445,24 @@ export default function GoalsPage() {
             selected={approvalFilter}
             onChange={setApprovalFilter}
             active={isApprovalFilterActive}
+          />
+          <FilterMultiSelect
+            id="goals-department"
+            label="Department"
+            placeholder={hasDepartmentScope ? 'All your departments' : 'All departments'}
+            options={departmentOptions}
+            selected={departmentFilter}
+            onChange={onDepartmentFilterChange}
+            active={isDepartmentFilterActive}
+          />
+          <FilterMultiSelect
+            id="goals-team"
+            label="Team"
+            placeholder="All teams"
+            options={teamOptions}
+            selected={teamFilter}
+            onChange={setTeamFilter}
+            active={isTeamFilterActive}
           />
           <div className="pd-form-row">
             <label className="pd-label" htmlFor="goals-org-unit">

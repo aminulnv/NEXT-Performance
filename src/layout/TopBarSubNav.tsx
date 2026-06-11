@@ -19,6 +19,24 @@ function isItemActive(path: string, pathname: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`)
 }
 
+function hasNestedSibling(items: NavItemChild[], path: string): boolean {
+  return items.some((item) => item.path !== path && item.path.startsWith(`${path}/`))
+}
+
+/** Prefer the most specific tab when paths share a prefix (e.g. /goals vs /goals/analytics). */
+function resolveActiveSubNavPath(items: NavItemChild[], pathname: string): string | undefined {
+  let best: { path: string; length: number } | undefined
+
+  for (const item of items) {
+    if (!isItemActive(item.path, pathname)) continue
+    if (!best || item.path.length > best.length) {
+      best = { path: item.path, length: item.path.length }
+    }
+  }
+
+  return best?.path
+}
+
 export function TopBarSubNav({ items, compact = false }: Props) {
   const { pathname } = useLocation()
   const navRef = useRef<HTMLElement>(null)
@@ -26,8 +44,7 @@ export function TopBarSubNav({ items, compact = false }: Props) {
   const [indicator, setIndicator] = useState<IndicatorStyle | null>(null)
   const [indicatorReady, setIndicatorReady] = useState(false)
 
-  const activePath =
-    items.find((item) => isItemActive(item.path, pathname))?.path ?? items[0]?.path
+  const activePath = resolveActiveSubNavPath(items, pathname) ?? items[0]?.path
 
   const updateIndicator = useCallback(() => {
     const nav = navRef.current
@@ -113,7 +130,7 @@ export function TopBarSubNav({ items, compact = false }: Props) {
         />
       )}
       {items.map((item) => {
-        const active = isItemActive(item.path, pathname)
+        const active = item.path === activePath
         const Icon = item.icon
         return (
           <NavLink
@@ -124,7 +141,7 @@ export function TopBarSubNav({ items, compact = false }: Props) {
               else linkRefs.current.delete(item.path)
             }}
             to={item.path}
-            end={false}
+            end={hasNestedSibling(items, item.path)}
             style={{
               position: 'relative',
               zIndex: 1,

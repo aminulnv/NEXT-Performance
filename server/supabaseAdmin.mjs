@@ -14,6 +14,9 @@ export function getSupabaseConfigHint() {
   if (url && !key) {
     return 'SUPABASE_URL is set but SUPABASE_SERVICE_ROLE_KEY is missing — users save to access.json until you add the key and restart the API.'
   }
+  if (url && key) {
+    return 'Supabase is configured but user access fell back to access.json — restart npm run dev after applying migrations, or check server logs for [access] errors.'
+  }
   return null
 }
 

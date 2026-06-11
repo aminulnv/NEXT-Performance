@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { isValidRole } from './permissions.mjs'
 import { enrichAccessFieldsFromRevolut } from './employeeLookup.mjs'
 import { isSupabaseConfigured } from './supabaseAdmin.mjs'
+import { normalizeScopedDepartments } from './departmentScope.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ACCESS_FILE = path.join(__dirname, 'data', 'access.json')
@@ -41,7 +42,14 @@ export async function initAccessStore() {
     activeBackend = 'supabase'
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.warn('[access] Supabase unreachable, using access.json:', message)
+    if (/column .* does not exist|relation .* does not exist/i.test(message)) {
+      console.warn(
+        '[access] Supabase schema out of date, using access.json until migrations are applied and the API is restarted:',
+        message,
+      )
+    } else {
+      console.warn('[access] Supabase unreachable, using access.json:', message)
+    }
     activeBackend = 'file'
     supabaseStore = null
   }
@@ -112,6 +120,7 @@ async function listUsersFromFile() {
     role: entry.role,
     name: entry.name ?? null,
     employeeId: entry.employeeId ?? null,
+    scopedDepartments: normalizeScopedDepartments(entry.scopedDepartments),
     addedAt: entry.addedAt ?? null,
   }))
 }
@@ -136,13 +145,17 @@ export async function getUserAccess(email) {
   )
 }
 
-export async function upsertUser(email, { role, name, employeeId }, options = {}) {
+export async function upsertUser(email, { role, name, employeeId, scopedDepartments }, options = {}) {
   const key = email.toLowerCase()
   const enriched = enrichAccessFieldsFromRevolut(
     key,
     { role, name, employeeId },
     options,
   )
+  const scoped =
+    scopedDepartments !== undefined
+      ? normalizeScopedDepartments(scopedDepartments)
+      : undefined
 
   async function upsertToFile() {
     if (!isValidRole(enriched.role)) {
@@ -154,6 +167,8 @@ export async function upsertUser(email, { role, name, employeeId }, options = {}
       role: enriched.role,
       name: enriched.name ?? existing?.name ?? null,
       employeeId: enriched.employeeId ?? existing?.employeeId ?? null,
+      scopedDepartments:
+        scoped !== undefined ? scoped : (existing?.scopedDepartments ?? null),
       addedAt: existing?.addedAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -167,6 +182,7 @@ export async function upsertUser(email, { role, name, employeeId }, options = {}
         role: enriched.role,
         name: enriched.name,
         employeeId: enriched.employeeId,
+        scopedDepartments: scoped,
       }),
     upsertToFile,
   )

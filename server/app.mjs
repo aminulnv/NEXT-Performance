@@ -28,6 +28,7 @@ import {
 import {
   filterRecordsForUser,
   canAccessPerformanceApi,
+  canAccessEmployeesDirectory,
   canUploadGoals,
   canForceRefresh,
   roleHasPage,
@@ -45,6 +46,11 @@ import {
   getPerformanceCacheConfigHint,
 } from './performanceStoreSupabase.mjs'
 import { getPlatformLabel, isServerless, requiresSupabaseStorage } from './runtime.mjs'
+import {
+  filterEmployeesForUser,
+  filterGoalsForUser,
+} from './departmentScope.mjs'
+import { getEmployeesDirectoryFromCache } from './employeeLookup.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distPath = path.join(__dirname, '..', 'dist')
@@ -313,6 +319,17 @@ async function resolveCache({ force = false } = {}) {
   return emptyWarmingCache()
 }
 
+function requireEmployeesDirectoryAccess(req, res, next) {
+  if (!isAuthEnabled()) return next()
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+  if (!canAccessEmployeesDirectory(req.user.role)) {
+    return res.status(403).json({ error: 'You do not have access to the employee directory' })
+  }
+  next()
+}
+
 function requirePerformanceApiAccess(req, res, next) {
   if (!isAuthEnabled()) return next()
   if (!req.user) {
@@ -331,7 +348,7 @@ function requireGoalsRead(req, res, next) {
   }
   if (
     !roleHasPage(req.user.role, 'goals') &&
-    !roleHasPage(req.user.role, 'analytics.monitoring')
+    !roleHasPage(req.user.role, 'goals.analytics')
   ) {
     return res.status(403).json({ error: 'You do not have access to goals' })
   }
@@ -352,6 +369,30 @@ function verifyCronSecret(req, res) {
     return false
   }
   return true
+}
+
+function scopedEmployeesPayload(employees, user, meta) {
+  const filtered = filterEmployeesForUser(employees, user)
+  return {
+    ...meta,
+    employees: filtered,
+    count: filtered.length,
+  }
+}
+
+function scopedGoalsPayload(data, user) {
+  const employees = getEmployeesDirectoryFromCache()
+  const goals = filterGoalsForUser(data.goals, employees, user)
+  return {
+    goals,
+    columns: data.columns,
+    columnMap: data.columnMap,
+    importedAt: data.importedAt,
+    source: data.source,
+    sourcePath: data.sourcePath ?? null,
+    hint: data.hint,
+    goalCount: goals.length,
+  }
 }
 
 const ready = initPermissionsConfig()
@@ -422,16 +463,7 @@ app.get('/api/goals', requireAuth, requireGoalsRead, async (req, res) => {
   try {
     const data = await loadGoalsDataset()
     sendPrivateCache(res)
-    res.json({
-      goals: data.goals,
-      columns: data.columns,
-      columnMap: data.columnMap,
-      importedAt: data.importedAt,
-      source: data.source,
-      sourcePath: data.sourcePath ?? null,
-      hint: data.hint,
-      goalCount: data.goals.length,
-    })
+    res.json(scopedGoalsPayload(data, req.user))
   } catch (err) {
     console.error(err)
     res.status(500).json({
@@ -506,7 +538,7 @@ app.get(
 app.get(
   '/api/employees',
   requireAuth,
-  requirePerformanceApiAccess,
+  requireEmployeesDirectoryAccess,
   async (req, res) => {
     try {
       const force = req.query.refresh === '1'
@@ -517,13 +549,13 @@ app.get(
       sendPrivateCache(res)
 
       if (!force && memoryCache?.employeesDirectory?.length) {
-        return res.json({
-          employees: memoryCache.employeesDirectory,
-          count: memoryCache.employeesDirectory.length,
-          fetchedAt: memoryCache.fetchedAt,
-          source: memoryCache.cacheStatus ?? 'memory',
-          refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
-        })
+        return res.json(
+          scopedEmployeesPayload(memoryCache.employeesDirectory, req.user, {
+            fetchedAt: memoryCache.fetchedAt,
+            source: memoryCache.cacheStatus ?? 'memory',
+            refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
+          }),
+        )
       }
 
       if (!force) {
@@ -534,13 +566,13 @@ app.get(
               memoryCache.employeesDirectory = fromSupabase.employees
               memoryCache.fetchedAt = fromSupabase.fetchedAt ?? memoryCache.fetchedAt
             }
-            return res.json({
-              employees: fromSupabase.employees,
-              count: fromSupabase.count,
-              fetchedAt: fromSupabase.fetchedAt,
-              source: fromSupabase.source,
-              refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
-            })
+            return res.json(
+              scopedEmployeesPayload(fromSupabase.employees, req.user, {
+                fetchedAt: fromSupabase.fetchedAt,
+                source: fromSupabase.source,
+                refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
+              }),
+            )
           }
         } catch (err) {
           console.warn('[employees] Supabase read failed:', err instanceof Error ? err.message : err)
@@ -554,13 +586,13 @@ app.get(
             ...persisted,
             employeesDirectory: persisted.employeesDirectory,
           })
-          return res.json({
-            employees: persisted.employeesDirectory,
-            count: persisted.employeesDirectory.length,
-            fetchedAt: persisted.fetchedAt,
-            source: persisted.cacheStatus ?? 'disk',
-            refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
-          })
+          return res.json(
+            scopedEmployeesPayload(persisted.employeesDirectory, req.user, {
+              fetchedAt: persisted.fetchedAt,
+              source: persisted.cacheStatus ?? 'disk',
+              refreshing: Boolean(refreshInFlight || employeesRefreshInFlight),
+            }),
+          )
         }
       }
 
@@ -597,13 +629,13 @@ app.get(
         memoryCacheAt = Date.now()
       }
 
-      res.json({
-        employees: fetched.employeesDirectory,
-        count: fetched.count,
-        fetchedAt: fetched.fetchedAt,
-        source: 'revolut',
-        refreshing: Boolean(refreshInFlight),
-      })
+      res.json(
+        scopedEmployeesPayload(fetched.employeesDirectory, req.user, {
+          fetchedAt: fetched.fetchedAt,
+          source: 'revolut',
+          refreshing: Boolean(refreshInFlight),
+        }),
+      )
     } catch (err) {
       console.error(err)
       res.status(500).json({

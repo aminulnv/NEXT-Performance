@@ -6,6 +6,7 @@ export type AccessUser = {
   role: Role
   name: string | null
   employeeId: string | null
+  scopedDepartments: string[] | null
   addedAt: string | null
 }
 
@@ -56,6 +57,20 @@ export async function fetchAccessConfig(): Promise<AccessConfigResponse> {
   return res.json() as Promise<AccessConfigResponse>
 }
 
+export type DepartmentListResponse = {
+  departments: string[]
+  employeeCount: number
+}
+
+export async function fetchDepartmentOptions(): Promise<DepartmentListResponse> {
+  const res = await apiFetch('/api/access/departments')
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? `Department list failed (${res.status})`)
+  }
+  return res.json() as Promise<DepartmentListResponse>
+}
+
 export type SyncRevolutUserResult = {
   email: string
   role: Role
@@ -88,6 +103,7 @@ export async function saveAccessUser(payload: {
   role: Role
   name?: string
   employeeId?: string
+  scopedDepartments?: string[] | null
 }): Promise<void> {
   const res = await apiFetch('/api/access/users', {
     method: 'PUT',

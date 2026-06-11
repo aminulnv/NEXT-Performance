@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { useGoalsData } from '@/hooks/useGoalsData'
 import { useEmployeesDirectory } from '@/hooks/useEmployeesDirectory'
 import { usePerformanceData } from '@/hooks/usePerformanceData'
@@ -9,9 +10,7 @@ import { LoadingState } from '@/components/performance/LoadingState'
 import { EmptyState } from '@/components/performance/EmptyState'
 import { FilterMultiSelect } from '@/components/performance/FilterMultiSelect'
 import { StatCard } from '@/components/performance/StatCard'
-import { paginate, TablePagination } from '@/components/performance/TablePagination'
 import { ScrollableTableViewport } from '@/components/performance/ScrollableTableViewport'
-import { RatingDistributionPanel } from '@/components/performance/RatingDistributionPanel'
 import {
   CALENDAR_QUARTERS,
   currentCalendarQuarter,
@@ -28,7 +27,6 @@ import {
   buildCheckInCompletionSummary,
   buildGoalsMonitoringSummary,
   buildManagersPendingApproval,
-  buildRatingMonitoringSummary,
   goalMatchesReviewCycle,
   uniqueReviewCycles,
 } from '@/lib/goalsMonitoring'
@@ -46,6 +44,7 @@ import type { EmployeeGoalStatus, GoalBreakdownRow } from '@/lib/goalsMonitoring
 import { PersonAvatar } from '@/components/performance/PersonAvatar'
 import { uniqueFieldValues } from '@/lib/metrics'
 import { allGoalsDetailsUrl, personGoalsSearchUrl } from '@/lib/goalsFilters'
+import { canAccessPerformanceData, getRoleDefinition, roleUsesDepartmentScope } from '@/lib/permissions'
 import type { FlagPersonRow, GoalOwnerProfileLookup } from '@/lib/goalOwnerProfiles'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import '@/styles/performance.css'
@@ -161,8 +160,6 @@ function PersonWithAvatar({
     </span>
   )
 }
-
-const DEV_PERFORMERS_PAGE_SIZE = 10
 
 type SubmissionDayThreshold = 10 | 15 | 30
 
@@ -711,7 +708,13 @@ function Section({
   )
 }
 
-export default function MonitoringPage() {
+export default function GoalsAnalyticsPage() {
+  const { role, user } = useAuth()
+  const canLoadPerformance = role ? canAccessPerformanceData(role) : false
+  const canUploadGoals = role ? Boolean(getRoleDefinition(role)?.uploadGoals) : false
+  const scopedDepartments = user?.scopedDepartments ?? null
+  const hasDepartmentScope =
+    Boolean(role && roleUsesDepartmentScope(role) && scopedDepartments?.length)
   const {
     goals,
     dataset,
@@ -734,23 +737,23 @@ export default function MonitoringPage() {
   )
 
   const goalCycles = useMemo(() => uniqueReviewCycles(goals), [goals])
-  const perfCycles = useMemo(() => uniqueFieldValues(records, 'cycle_name'), [records])
+  const perfCycles = useMemo(
+    () => (canLoadPerformance ? uniqueFieldValues(records, 'cycle_name') : []),
+    [records, canLoadPerformance],
+  )
   const reviewCycles = useMemo(() => {
     const cycles = new Set<string>()
     for (const cycle of goalCycles) cycles.add(cycle)
-    for (const cycle of perfCycles) cycles.add(cycle)
+    if (canLoadPerformance) {
+      for (const cycle of perfCycles) cycles.add(cycle)
+    }
     return [...cycles].sort((a, b) => a.localeCompare(b))
-  }, [perfCycles, goalCycles])
+  }, [perfCycles, goalCycles, canLoadPerformance])
 
   const [reviewCycleFilter, setReviewCycleFilter] = useState('Q2 2026')
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([])
   const [teamFilter, setTeamFilter] = useState<string[]>([])
   const [countryFilter, setCountryFilter] = useState<string[]>([])
-  const [devSearch, setDevSearch] = useState('')
-  const [devDeptFilter, setDevDeptFilter] = useState('')
-  const [devCycleFilter, setDevCycleFilter] = useState('')
-  const [devRatingFilter, setDevRatingFilter] = useState('')
-  const [devPage, setDevPage] = useState(1)
   const [calendarQuarter, setCalendarQuarter] = useState<CalendarQuarter | null>(2)
   const [calendarYear, setCalendarYear] = useState(2026)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
@@ -769,10 +772,10 @@ export default function MonitoringPage() {
   const ownerProfileLookup = useMemo(
     () =>
       enrichGoalOwnerProfileLookup(
-        buildGoalOwnerProfileLookup(records),
+        canLoadPerformance ? buildGoalOwnerProfileLookup(records) : { byEmployeeId: new Map(), byEmail: new Map() },
         directoryEmployees,
       ),
-    [records, directoryEmployees],
+    [records, directoryEmployees, canLoadPerformance],
   )
 
   const rosterFilterState = useMemo(
@@ -789,7 +792,26 @@ export default function MonitoringPage() {
     rosterFilterState.teams.length > 0 ||
     rosterFilterState.countries.length > 0
 
+  function clearRosterFilters() {
+    setDepartmentFilter([])
+    setTeamFilter([])
+    setCountryFilter([])
+  }
+
+  function onDepartmentFilterChange(next: string[]) {
+    if (hasDepartmentScope && scopedDepartments?.length) {
+      const allowed = new Set(scopedDepartments)
+      setDepartmentFilter(next.filter((department) => allowed.has(department)))
+      return
+    }
+    setDepartmentFilter(next)
+  }
+
   const departmentOptions = useMemo(() => {
+    if (hasDepartmentScope && scopedDepartments?.length) {
+      return scopedDepartments.map((department) => ({ value: department, label: department }))
+    }
+
     const roster = rosterForFilterOptions(
       activeRoster,
       rosterFilterState,
@@ -804,7 +826,7 @@ export default function MonitoringPage() {
     return [...departments]
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
       .map((department) => ({ value: department, label: department }))
-  }, [activeRoster, rosterFilterState, ownerProfileLookup])
+  }, [activeRoster, rosterFilterState, ownerProfileLookup, hasDepartmentScope, scopedDepartments])
 
   const teamOptions = useMemo(() => {
     const roster = rosterForFilterOptions(
@@ -883,7 +905,7 @@ export default function MonitoringPage() {
         cycleFilter: reviewCycleFilter || null,
         calendarQuarter: quarterSelected ? calendarQuarter : null,
         calendarYear: quarterSelected ? calendarYear : null,
-        performanceRecords: records,
+        performanceRecords: canLoadPerformance ? records : [],
         ownerProfileLookup,
         activeRoster: filteredRoster,
       }),
@@ -896,6 +918,7 @@ export default function MonitoringPage() {
       quarterSelected,
       ownerProfileLookup,
       filteredRoster,
+      canLoadPerformance,
     ],
   )
 
@@ -907,20 +930,17 @@ export default function MonitoringPage() {
     })
   }, [goals, calendarQuarter, calendarYear, quarterSelected])
 
-  const ratingSummary = useMemo(
-    () => buildRatingMonitoringSummary(records, reviewCycleFilter || null),
-    [records, reviewCycleFilter],
-  )
-
   const toFlagRows = (employees: EmployeeGoalStatus[]): FlagPersonRow[] =>
     employees.map((e) => employeeToFlagPersonRow(e, ownerProfileLookup))
 
   const pendingManagerRows = useMemo(
     () =>
-      buildManagersPendingApproval(goals, records, reviewCycleFilter || null).map((row) =>
-        managerPendingToFlagPersonRow(row, ownerProfileLookup),
-      ),
-    [goals, records, reviewCycleFilter, ownerProfileLookup],
+      buildManagersPendingApproval(
+        goals,
+        canLoadPerformance ? records : [],
+        reviewCycleFilter || null,
+      ).map((row) => managerPendingToFlagPersonRow(row, ownerProfileLookup)),
+    [goals, records, reviewCycleFilter, ownerProfileLookup, canLoadPerformance],
   )
 
   const managersZeroSubmittedRows = useMemo(
@@ -978,48 +998,6 @@ export default function MonitoringPage() {
     return allGoalsDetailsUrl(matchedGoalCycle ?? reviewCycleFilter)
   }, [reviewCycleFilter, goalCycles])
 
-  const devRows = ratingSummary.devOrUnsatisfactory
-
-  const devFilterOptions = useMemo(() => {
-    const departments = new Set<string>()
-    const cycles = new Set<string>()
-    const ratings = new Set<string>()
-    for (const row of devRows) {
-      if (row.department) departments.add(row.department)
-      if (row.cycleName) cycles.add(row.cycleName)
-      if (row.displayGrade) ratings.add(row.displayGrade)
-    }
-    return {
-      departments: [...departments].sort(),
-      cycles: [...cycles].sort(),
-      ratings: [...ratings].sort(),
-    }
-  }, [devRows])
-
-  const filteredDevRows = useMemo(() => {
-    const q = devSearch.trim().toLowerCase()
-    return devRows.filter((row) => {
-      if (devDeptFilter && row.department !== devDeptFilter) return false
-      if (devCycleFilter && row.cycleName !== devCycleFilter) return false
-      if (devRatingFilter && row.displayGrade !== devRatingFilter) return false
-      if (!q) return true
-      const hay = [row.employeeName, row.employeeId, row.department, row.cycleName, row.displayGrade]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return hay.includes(q)
-    })
-  }, [devRows, devSearch, devDeptFilter, devCycleFilter, devRatingFilter])
-
-  useEffect(() => {
-    setDevPage(1)
-  }, [devSearch, devDeptFilter, devCycleFilter, devRatingFilter, reviewCycleFilter])
-
-  const devPagination = useMemo(
-    () => paginate(filteredDevRows, devPage, DEV_PERFORMERS_PAGE_SIZE),
-    [filteredDevRows, devPage],
-  )
-
   async function onFileUpload(file: File) {
     setUploadMessage(null)
     try {
@@ -1031,33 +1009,40 @@ export default function MonitoringPage() {
     }
   }
 
-  if (goalsLoading || perfLoading || employeesLoading) return <LoadingState />
+  if (goalsLoading || employeesLoading || (canLoadPerformance && perfLoading)) {
+    return <LoadingState />
+  }
 
   return (
     <div className="pd-page">
       <header className="pd-page-header">
         <div>
-          <h1 className="pd-page-title">Monitoring</h1>
+          <h1 className="pd-page-title">Goal analytics</h1>
           <p className="pd-page-subtitle">
-            Revolut People does not expose Goals on the public API. Upload the CSV export from
-            Revolut (Goals → Export) using Upload CSV below.
+            Track goal submission, manager approval, check-ins, and program compliance by quarter
+            and review cycle.
+            {canUploadGoals
+              ? ' Upload the Revolut Goals CSV export using Upload CSV below.'
+              : ''}
           </p>
         </div>
-        <GoalsCsvUpload
-          uploading={uploading}
-          onUpload={onFileUpload}
-          onRefresh={() => reload()}
-          importedAt={dataset?.importedAt}
-          source={dataset?.source}
-        />
+        {canUploadGoals ? (
+          <GoalsCsvUpload
+            uploading={uploading}
+            onUpload={onFileUpload}
+            onRefresh={() => reload()}
+            importedAt={dataset?.importedAt}
+            source={dataset?.source}
+          />
+        ) : null}
       </header>
 
-      {(goalsError || perfError || employeesError) && (
-        <div className="pd-alert">{goalsError ?? perfError ?? employeesError}</div>
+      {(goalsError || (canLoadPerformance && perfError) || employeesError) && (
+        <div className="pd-alert">{goalsError ?? (canLoadPerformance ? perfError : null) ?? employeesError}</div>
       )}
       {uploadMessage && <p className="pd-page-subtitle">{uploadMessage}</p>}
 
-      {goals.length > 0 || records.length > 0 ? (
+      {goals.length > 0 ? (
         <div
           className="pd-filter-bar pd-filter-bar--compact"
           style={{ marginBottom: '1rem' }}
@@ -1124,10 +1109,10 @@ export default function MonitoringPage() {
           <FilterMultiSelect
             id="monitoring-department-filter"
             label="Department"
-            placeholder="All departments"
+            placeholder={hasDepartmentScope ? 'All your departments' : 'All departments'}
             options={departmentOptions}
             selected={departmentFilter}
-            onChange={setDepartmentFilter}
+            onChange={onDepartmentFilterChange}
             active={departmentFilter.length > 0}
           />
           <FilterMultiSelect
@@ -1148,6 +1133,15 @@ export default function MonitoringPage() {
             onChange={setCountryFilter}
             active={countryFilter.length > 0}
           />
+          {rosterFiltersActive ? (
+            <button
+              type="button"
+              className="pd-btn-secondary pd-btn pd-filter-bar__clear"
+              onClick={clearRosterFilters}
+            >
+              Clear filters
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -1364,137 +1358,6 @@ export default function MonitoringPage() {
           </Section>
                 </>
               )}
-
-          <Section title="Rating distribution">
-            {ratingSummary.totalRated === 0 ? (
-              <p className="pd-page-subtitle">
-                No rated scorecards for this cycle. Sync performance data or pick another cycle.
-              </p>
-            ) : (
-              <RatingDistributionPanel
-                distribution={ratingSummary.distribution}
-                outlierDepartments={ratingSummary.outlierDepartments}
-              />
-            )}
-          </Section>
-
-          <section className="pd-section pd-section--compact">
-            <h2 className="pd-section-title">Developing/unsatisfactory performers</h2>
-            {devRows.length === 0 ? (
-              <p className="pd-page-subtitle">None in scope.</p>
-            ) : (
-              <div className="pd-panel pd-dev-performers">
-                <div className="pd-filter-bar pd-dev-performers-filters">
-                  <div className="pd-form-row">
-                    <label className="pd-label" htmlFor="dev-unsat-search">
-                      Search
-                    </label>
-                    <input
-                      id="dev-unsat-search"
-                      className="pd-input"
-                      placeholder="Employee, department, cycle…"
-                      value={devSearch}
-                      onChange={(e) => setDevSearch(e.target.value)}
-                    />
-                  </div>
-                  <div className="pd-form-row">
-                    <label className="pd-label" htmlFor="dev-unsat-dept">
-                      Department
-                    </label>
-                    <select
-                      id="dev-unsat-dept"
-                      className="pd-select"
-                      value={devDeptFilter}
-                      onChange={(e) => setDevDeptFilter(e.target.value)}
-                    >
-                      <option value="">All</option>
-                      {devFilterOptions.departments.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="pd-form-row">
-                    <label className="pd-label" htmlFor="dev-unsat-cycle">
-                      Cycle
-                    </label>
-                    <select
-                      id="dev-unsat-cycle"
-                      className="pd-select"
-                      value={devCycleFilter}
-                      onChange={(e) => setDevCycleFilter(e.target.value)}
-                    >
-                      <option value="">All</option>
-                      {devFilterOptions.cycles.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="pd-form-row">
-                    <label className="pd-label" htmlFor="dev-unsat-rating">
-                      Rating
-                    </label>
-                    <select
-                      id="dev-unsat-rating"
-                      className="pd-select"
-                      value={devRatingFilter}
-                      onChange={(e) => setDevRatingFilter(e.target.value)}
-                    >
-                      <option value="">All</option>
-                      {devFilterOptions.ratings.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {filteredDevRows.length === 0 ? (
-                  <p className="pd-page-subtitle pd-dev-performers-empty">
-                    No employees match the current filters.
-                  </p>
-                ) : (
-                  <>
-                    <div className="pd-table-wrap pd-dev-performers-table">
-                      <table className="pd-table">
-                        <thead>
-                          <tr>
-                            <th>Employee</th>
-                            <th>Department</th>
-                            <th>Cycle</th>
-                            <th>Rating</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {devPagination.items.map((r, i) => (
-                            <tr key={`${r.employeeId}-${devPagination.startIndex + i}`}>
-                              <td>{r.employeeName ?? r.employeeId ?? '—'}</td>
-                              <td>{r.department ?? '—'}</td>
-                              <td>{r.cycleName ?? '—'}</td>
-                              <td>
-                                <span className="pd-badge pd-badge-warn">{r.displayGrade}</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <TablePagination
-                      page={devPagination.page}
-                      totalPages={devPagination.totalPages}
-                      totalItems={devPagination.totalItems}
-                      startIndex={devPagination.startIndex}
-                      endIndex={devPagination.endIndex}
-                      onPageChange={setDevPage}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-          </section>
             </>
           )}
       </div>

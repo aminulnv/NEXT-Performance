@@ -1,11 +1,13 @@
 import { getSupabaseAdmin } from './supabaseAdmin.mjs'
 import { isValidRole } from './permissions.mjs'
+import { normalizeScopedDepartments } from './departmentScope.mjs'
 
 function rowToEntry(row) {
   return {
     role: row.role,
     name: row.name ?? null,
     employeeId: row.employee_id ?? null,
+    scopedDepartments: normalizeScopedDepartments(row.scoped_departments),
     addedAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
   }
@@ -15,7 +17,7 @@ export async function listUsers() {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('dashboard_users')
-    .select('email, role, name, employee_id, created_at, updated_at')
+    .select('email, role, name, employee_id, scoped_departments, created_at, updated_at')
     .order('email')
 
   if (error) throw new Error(error.message)
@@ -24,6 +26,7 @@ export async function listUsers() {
     role: row.role,
     name: row.name,
     employeeId: row.employee_id,
+    scopedDepartments: normalizeScopedDepartments(row.scoped_departments),
     addedAt: row.created_at,
   }))
 }
@@ -33,7 +36,7 @@ export async function getUserAccess(email) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('dashboard_users')
-    .select('email, role, name, employee_id, created_at, updated_at')
+    .select('email, role, name, employee_id, scoped_departments, created_at, updated_at')
     .eq('email', key)
     .maybeSingle()
 
@@ -42,25 +45,27 @@ export async function getUserAccess(email) {
   return rowToEntry(data)
 }
 
-export async function upsertUser(email, { role, name, employeeId }) {
+export async function upsertUser(email, { role, name, employeeId, scopedDepartments }) {
   const key = email.toLowerCase()
   if (!isValidRole(role)) {
     throw new Error(`Invalid role: ${role}`)
   }
 
   const supabase = getSupabaseAdmin()
+  const row = {
+    email: key,
+    role,
+    name: name ?? null,
+    employee_id: employeeId ?? null,
+  }
+  if (scopedDepartments !== undefined) {
+    row.scoped_departments = normalizeScopedDepartments(scopedDepartments)
+  }
+
   const { data, error } = await supabase
     .from('dashboard_users')
-    .upsert(
-      {
-        email: key,
-        role,
-        name: name ?? null,
-        employee_id: employeeId ?? null,
-      },
-      { onConflict: 'email' },
-    )
-    .select('email, role, name, employee_id, created_at, updated_at')
+    .upsert(row, { onConflict: 'email' })
+    .select('email, role, name, employee_id, scoped_departments, created_at, updated_at')
     .single()
 
   if (error) throw new Error(error.message)

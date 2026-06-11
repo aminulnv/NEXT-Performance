@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { getSupabaseAdmin, isSupabaseConfigured } from './supabaseAdmin.mjs'
 import { normalizePermissionsConfig } from './permissionsValidation.mjs'
+import { migratePermissionsConfig } from './permissionsMigrate.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSIONS_PATH = path.join(__dirname, '..', 'src', 'config', 'permissions.json')
@@ -37,7 +38,7 @@ export async function initPermissionsConfig() {
   try {
     const fromDb = await readSupabaseConfig()
     if (fromDb?.pages && fromDb?.roles) {
-      cachedConfig = normalizePermissionsConfig(fromDb)
+      cachedConfig = normalizePermissionsConfig(migratePermissionsConfig(fromDb))
       cacheSource = 'supabase'
       return
     }
@@ -45,7 +46,9 @@ export async function initPermissionsConfig() {
     console.warn('[permissions] Supabase load failed, using file:', err.message)
   }
 
-  cachedConfig = normalizePermissionsConfig(await readFileConfig())
+  cachedConfig = normalizePermissionsConfig(
+    migratePermissionsConfig(await readFileConfig()),
+  )
   cacheSource = 'file'
 }
 

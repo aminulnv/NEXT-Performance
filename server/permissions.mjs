@@ -48,13 +48,19 @@ export function pageKeyFromPathname(pathname) {
     return 'performance.scorecard'
   }
 
+  let bestMatch = null
+
   for (const [key, meta] of Object.entries(config.pages)) {
     const base = meta.path.replace(/\/$/, '') || '/'
     if (base.includes(':')) continue
-    if (normalized === base || (base !== '/' && normalized.startsWith(`${base}/`))) {
-      return key
+    const matches =
+      normalized === base || (base !== '/' && normalized.startsWith(`${base}/`))
+    if (matches && (!bestMatch || base.length > bestMatch.baseLength)) {
+      bestMatch = { key, baseLength: base.length }
     }
   }
+
+  if (bestMatch) return bestMatch.key
 
   if (normalized === '/' || normalized === '') return 'home'
   return null
@@ -86,13 +92,22 @@ const PERFORMANCE_PAGE_KEYS = new Set([
   'performance.records',
   'performance.cycles',
   'performance.scorecard',
-  'analytics.explore',
-  'analytics.reviewers',
-  'analytics.calibration',
+  'performance.analytics',
+  'performance.explore',
+  'performance.reviewers',
+  'performance.calibration',
 ])
 
 export function canAccessPerformanceApi(role) {
   return [...PERFORMANCE_PAGE_KEYS].some((key) => roleHasPage(role, key))
+}
+
+export function canAccessEmployeesDirectory(role) {
+  return (
+    canAccessPerformanceApi(role) ||
+    roleHasPage(role, 'goals') ||
+    roleHasPage(role, 'goals.analytics')
+  )
 }
 
 const MANAGER_EMAIL_KEYS = [

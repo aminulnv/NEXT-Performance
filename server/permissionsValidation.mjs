@@ -22,6 +22,10 @@ const BUILTIN_DEFAULTS = {
     system: true,
     dataAccess: 'summary',
   },
+  hrbp: {
+    system: true,
+    dataAccess: 'summary',
+  },
 }
 
 export function normalizeRoleDefinition(id, role) {

@@ -8,6 +8,7 @@ export type AuthUser = {
   picture: string | null
   role: Role
   employeeId: string | null
+  scopedDepartments: string[] | null
   roleLabel: string
 }
 

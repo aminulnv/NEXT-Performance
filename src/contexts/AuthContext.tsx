@@ -36,6 +36,7 @@ const DEV_USER: AuthUser = {
   picture: null,
   role: 'admin',
   employeeId: null,
+  scopedDepartments: null,
   roleLabel: 'Administrator',
 }
 

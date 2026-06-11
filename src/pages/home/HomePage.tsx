@@ -188,17 +188,17 @@ export default function HomePage() {
             <strong>Review cycles</strong>
             <span>Completion and timeline status by cycle</span>
           </Link>
-          <Link to={routes.analytics.explore} className="pd-preset-card pd-preset-card--link">
-            <strong>Analytics explore</strong>
+          <Link to={routes.performance.explore} className="pd-preset-card pd-preset-card--link">
+            <strong>Performance explore</strong>
             <span>Custom charts and metric presets</span>
           </Link>
           <Link to={routes.goals.root} className="pd-preset-card pd-preset-card--link">
             <strong>Goals</strong>
             <span>Import and browse goals CSV data</span>
           </Link>
-          <Link to={routes.analytics.monitoring} className="pd-preset-card pd-preset-card--link">
-            <strong>Monitoring</strong>
-            <span>Goal check-ins, ratings, and program indicators</span>
+          <Link to={routes.goals.analytics} className="pd-preset-card pd-preset-card--link">
+            <strong>Goal analytics</strong>
+            <span>Submission, approval, check-ins, and program compliance</span>
           </Link>
           {canManageUsers ? (
             <Link

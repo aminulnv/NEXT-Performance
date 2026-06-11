@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   fetchAccessConfig,
+  fetchDepartmentOptions,
   lookupEmployeeByEmail,
   removeAccessUser,
   saveAccessUser,
@@ -15,6 +16,7 @@ import { downloadAccessUsersTemplate } from '@/lib/accessCsvTemplate'
 import { Plus, Upload, Download, Users, RefreshCw } from 'lucide-react'
 import {
   DATA_ACCESS_LABELS,
+  roleUsesDepartmentScope,
   slugifyRoleId,
   type DataAccess,
   type Role,
@@ -23,6 +25,7 @@ import {
 import { savePermissions } from '@/lib/permissionsApi'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import { LoadingState } from '@/components/performance/LoadingState'
+import { DepartmentMultiSelect } from '@/components/admin/DepartmentMultiSelect'
 import '@/styles/performance.css'
 
 type EditableUserRow = {
@@ -32,6 +35,7 @@ type EditableUserRow = {
   name: string
   role: Role
   employeeId: string
+  scopedDepartments: string[]
 }
 
 type EditableRoleRow = {
@@ -51,6 +55,7 @@ function usersToRows(users: AccessUser[]): EditableUserRow[] {
     name: u.name ?? '',
     role: u.role,
     employeeId: u.employeeId ?? '',
+    scopedDepartments: u.scopedDepartments ?? [],
   }))
 }
 
@@ -62,6 +67,7 @@ function emptyNewRow(defaultRole: Role): EditableUserRow {
     name: '',
     role: defaultRole,
     employeeId: '',
+    scopedDepartments: [],
   }
 }
 
@@ -150,17 +156,22 @@ export default function AccessManagementPage() {
   const [roleSavingKey, setRoleSavingKey] = useState<string | null>(null)
   const [syncingKey, setSyncingKey] = useState<string | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([])
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchAccessConfig()
+      const [data, departments] = await Promise.all([
+        fetchAccessConfig(),
+        fetchDepartmentOptions().catch(() => ({ departments: [], employeeCount: 0 })),
+      ])
       const draft = draftFromAccess(data)
       setConfig(data)
       setDraftPermissions(draft)
       setRows(rowsFromUsers(data.users, defaultAssignRole(data.roles)))
       setRoleRows(rowsFromRoles(draft))
+      setDepartmentOptions(departments.departments)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users')
     } finally {
@@ -302,6 +313,10 @@ export default function AccessManagementPage() {
       setError(`Unknown role "${row.role}". Save roles first or pick another role.`)
       return
     }
+    if (roleUsesDepartmentScope(row.role) && row.scopedDepartments.length === 0) {
+      setError('HRBP users must have at least one assigned department.')
+      return
+    }
 
     setSavingKey(row.key)
     setError(null)
@@ -311,6 +326,9 @@ export default function AccessManagementPage() {
         role: row.role,
         name: row.name.trim() || undefined,
         employeeId: row.employeeId.trim() || undefined,
+        scopedDepartments: roleUsesDepartmentScope(row.role)
+          ? row.scopedDepartments
+          : null,
       })
       await reload()
     } catch (err) {
@@ -528,6 +546,8 @@ export default function AccessManagementPage() {
           Edit rows to update users, or fill the blank row at the bottom to add someone new.
           Revolut IDs auto-fill on save when possible. Edit manually if needed, or use{' '}
           <strong>Sync</strong> to fetch the latest match from Revolut for that user.
+          HRBP users must be assigned one or more departments — they only see goal analytics
+          for those departments.
         </p>
         {syncMessage ? <p className="pd-upload-meta">{syncMessage}</p> : null}
         <div className="pd-table-wrap">
@@ -537,6 +557,7 @@ export default function AccessManagementPage() {
                 <th>Email</th>
                 <th>Name</th>
                 <th>Role</th>
+                <th>Departments</th>
                 <th>Revolut ID</th>
                 <th></th>
               </tr>
@@ -577,9 +598,15 @@ export default function AccessManagementPage() {
                     <td>
                       <select
                         value={row.role}
-                        onChange={(e) =>
-                          updateRow(row.key, { role: e.target.value as Role })
-                        }
+                        onChange={(e) => {
+                          const nextRole = e.target.value as Role
+                          updateRow(row.key, {
+                            role: nextRole,
+                            ...(roleUsesDepartmentScope(nextRole)
+                              ? {}
+                              : { scopedDepartments: [] }),
+                          })
+                        }}
                         className="pd-access-inline-select"
                         disabled={rowBusy}
                       >
@@ -589,6 +616,21 @@ export default function AccessManagementPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="pd-table-cell--departments">
+                      {roleUsesDepartmentScope(row.role) ? (
+                        <DepartmentMultiSelect
+                          id={`departments-${row.key}`}
+                          departments={departmentOptions}
+                          selected={row.scopedDepartments}
+                          onChange={(scopedDepartments) =>
+                            updateRow(row.key, { scopedDepartments })
+                          }
+                          disabled={rowBusy}
+                        />
+                      ) : (
+                        <span className="pd-muted">—</span>
+                      )}
                     </td>
                     <td>
                       <input
@@ -830,7 +872,11 @@ export default function AccessManagementPage() {
             </thead>
             <tbody>
               {draftPermissions &&
-                Object.entries(draftPermissions.pages).map(([pageKey, meta]) => (
+                Object.entries(draftPermissions.pages)
+                  .sort(([, a], [, b]) =>
+                    a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+                  )
+                  .map(([pageKey, meta]) => (
                   <tr key={pageKey}>
                     <td>{meta.label}</td>
                     {roleOptions.map(([roleId]) => {

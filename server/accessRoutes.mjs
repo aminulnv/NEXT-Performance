@@ -10,8 +10,30 @@ import { parseAccessCsv } from './parseAccessCsv.mjs'
 import { loadPermissionsConfig, rolesForAccessApi } from './permissions.mjs'
 import { requireAuth, requireRole, isAuthEnabled } from './auth.mjs'
 import { getSupabaseConfigHint } from './supabaseAdmin.mjs'
-import { lookupEmployeeByEmail } from './employeeLookup.mjs'
+import { getEmployeesDirectoryFromCache, lookupEmployeeByEmail } from './employeeLookup.mjs'
 import { fetchRevolutEmployeesByEmail } from './revolutEmployees.mjs'
+import { loadEmployeesFromSupabase } from './employeesStoreSupabase.mjs'
+import {
+  normalizeScopedDepartments,
+  uniqueDepartmentsFromEmployees,
+} from './departmentScope.mjs'
+
+async function resolveEmployeesDirectoryForAdmin() {
+  const fromCache = getEmployeesDirectoryFromCache()
+  if (fromCache.length) return fromCache
+  try {
+    const fromSupabase = await loadEmployeesFromSupabase()
+    if (fromSupabase?.employees?.length) return fromSupabase.employees
+  } catch (err) {
+    console.warn('[access] Could not load employees for department list:', err)
+  }
+  return []
+}
+
+function scopedDepartmentsForRole(role, scopedDepartments) {
+  if (role !== 'hrbp') return null
+  return normalizeScopedDepartments(scopedDepartments)
+}
 
 export function registerAccessRoutes(app) {
   app.get('/api/access', requireAuth, requireRole('admin'), async (_req, res) => {
@@ -29,6 +51,21 @@ export function registerAccessRoutes(app) {
       console.error(err)
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Failed to load access config',
+      })
+    }
+  })
+
+  app.get('/api/access/departments', requireAuth, requireRole('admin'), async (_req, res) => {
+    try {
+      const employees = await resolveEmployeesDirectoryForAdmin()
+      res.json({
+        departments: uniqueDepartmentsFromEmployees(employees),
+        employeeCount: employees.length,
+      })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to load departments',
       })
     }
   })
@@ -117,11 +154,21 @@ export function registerAccessRoutes(app) {
       if (!email || !email.includes('@')) {
         return res.status(400).json({ error: 'Valid email is required' })
       }
+      const scopedDepartments = scopedDepartmentsForRole(
+        role,
+        req.body?.scopedDepartments,
+      )
+      if (role === 'hrbp' && !scopedDepartments?.length) {
+        return res.status(400).json({
+          error: 'HRBP users must have at least one assigned department',
+        })
+      }
       const entry = await upsertUser(email, {
         role,
         name: typeof req.body?.name === 'string' ? req.body.name : undefined,
         employeeId:
           typeof req.body?.employeeId === 'string' ? req.body.employeeId : undefined,
+        scopedDepartments: role === 'hrbp' ? scopedDepartments : null,
       })
       const match = lookupEmployeeByEmail(email)
       res.json({

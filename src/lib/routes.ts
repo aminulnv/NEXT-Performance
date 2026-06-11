@@ -10,17 +10,23 @@ export const routes = {
     root: '/performance',
     records: '/performance/records',
     cycles: '/performance/cycles',
+    analytics: '/performance/analytics',
+    explore: '/performance/explore',
+    reviewers: '/performance/reviewers',
+    calibration: '/performance/calibration',
     scorecard: (recordId: string) => `/performance/scorecards/${encodeURIComponent(recordId)}`,
   },
   goals: {
     root: '/goals',
+    analytics: '/goals/analytics',
   },
+  /** @deprecated Legacy analytics paths — redirect to performance or goals routes */
   analytics: {
     root: '/analytics',
-    explore: '/analytics/explore',
-    reviewers: '/analytics/reviewers',
-    calibration: '/analytics/calibration',
-    monitoring: '/analytics/monitoring',
+    explore: '/performance/explore',
+    reviewers: '/performance/reviewers',
+    calibration: '/performance/calibration',
+    monitoring: '/goals/analytics',
   },
   admin: {
     root: '/admin',

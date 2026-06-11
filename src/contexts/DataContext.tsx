@@ -14,6 +14,11 @@ import { fetchEmployeesDirectory } from '@/lib/employeesApi'
 import { fetchGoals, uploadGoalsCsv } from '@/lib/goalsApi'
 import { readBrowserCache, writeBrowserCache } from '@/lib/browserCache'
 import { buildDashboardSummary } from '@/lib/metrics'
+import {
+  canAccessEmployeesDirectory,
+  canAccessPerformanceData,
+  roleHasPage,
+} from '@/lib/permissions'
 import type { DashboardSummary, PerformanceRecord } from '@/types/performance'
 import type { EmployeeDirectoryEntry } from '@/types/employee'
 import type { GoalsDataset } from '@/types/goals'
@@ -104,12 +109,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const userKey = userCacheKey(user)
   const userKeyRef = useRef(userKey)
   userKeyRef.current = userKey
+  const role = user?.role ?? null
+  const loadPerformance = role ? canAccessPerformanceData(role) : false
+  const loadEmployees = role ? canAccessEmployeesDirectory(role) : false
+  const loadGoals =
+    role != null &&
+    (roleHasPage(role, 'goals') || roleHasPage(role, 'goals.analytics'))
 
   const [performance, setPerformance] = useState<PerformanceState>(emptyPerformance)
   const [employees, setEmployees] = useState<EmployeesState>(emptyEmployees)
   const [goals, setGoals] = useState<GoalsState>(emptyGoals)
 
   const reloadPerformance = useCallback(async (refresh = false) => {
+    if (!loadPerformance) return
     const key = userKeyRef.current
     setPerformance((current) => ({ ...current, loading: true, error: null, warning: null }))
 
@@ -176,9 +188,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         warning: current.records.length ? message : current.warning,
       }))
     }
-  }, [])
+  }, [loadPerformance])
 
   const reloadEmployees = useCallback(async (refresh = false) => {
+    if (!loadEmployees) return
     const key = userKeyRef.current
     setEmployees((current) => ({ ...current, loading: true, error: null }))
 
@@ -244,9 +257,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         error: current.employees.length ? null : message,
       }))
     }
-  }, [])
+  }, [loadEmployees])
 
   const reloadGoals = useCallback(async () => {
+    if (!loadGoals) return
     const key = userKeyRef.current
     setGoals((current) => ({ ...current, loading: true, error: null }))
 
@@ -267,9 +281,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         error: current.dataset?.goals?.length ? null : message,
       }))
     }
-  }, [])
+  }, [loadGoals])
 
   const uploadCsv = useCallback(async (csvText: string) => {
+    if (!loadGoals) {
+      throw new Error('Goals upload is unavailable for your role')
+    }
     const key = userKeyRef.current
     setGoals((current) => ({ ...current, uploading: true, error: null }))
     try {
@@ -282,7 +299,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setGoals((current) => ({ ...current, uploading: false, error: message }))
       throw err
     }
-  }, [])
+  }, [loadGoals])
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -292,10 +309,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    void reloadPerformance(false)
-    void reloadEmployees(false)
-    void reloadGoals()
-  }, [authLoading, user, userKey, reloadPerformance, reloadEmployees, reloadGoals])
+    if (!loadPerformance) {
+      setPerformance({ ...emptyPerformance, loading: false })
+    } else {
+      void reloadPerformance(false)
+    }
+
+    if (!loadEmployees) {
+      setEmployees({ ...emptyEmployees, loading: false })
+    } else {
+      void reloadEmployees(false)
+    }
+
+    if (!loadGoals) {
+      setGoals({ ...emptyGoals, loading: false })
+    } else {
+      void reloadGoals()
+    }
+  }, [
+    authLoading,
+    user,
+    userKey,
+    loadPerformance,
+    loadEmployees,
+    loadGoals,
+    reloadPerformance,
+    reloadEmployees,
+    reloadGoals,
+  ])
 
   const value = useMemo<DataContextValue>(
     () => ({

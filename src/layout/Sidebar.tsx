@@ -232,13 +232,14 @@ export function Sidebar(props: SidebarProps) {
         {filteredNavItems.map((item) => {
           const { icon: Icon, label, path, end, children } = item
           const hasChildren = Boolean(children?.length)
+          const linkPath = hasChildren && children?.length ? children[0].path : path
           const linkEnd = hasChildren ? false : (end ?? path === '/')
           const tourId = navTourId(path)
 
           return (
             <NavLink
               key={path}
-              to={path}
+              to={linkPath}
               end={linkEnd}
               data-tour={tourId}
               title={displayCollapsed ? label : undefined}

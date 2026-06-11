@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { routes } from '@/lib/routes'
+import { redirectPathForUnauthorized } from '@/lib/permissions'
 
 type RoleProtectedRouteProps = {
   children: React.ReactNode
@@ -8,7 +8,7 @@ type RoleProtectedRouteProps = {
 
 /** Requires login and page-level permission for the current URL. */
 export default function RoleProtectedRoute({ children }: RoleProtectedRouteProps) {
-  const { user, loading, canAccessPath } = useAuth()
+  const { user, loading, canAccessPath, role } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -25,14 +25,22 @@ export default function RoleProtectedRoute({ children }: RoleProtectedRouteProps
   }
 
   if (!canAccessPath(location.pathname)) {
+    const fallback = role ? redirectPathForUnauthorized(role, location.pathname) : null
+    if (fallback && fallback !== location.pathname) {
+      return <Navigate to={`${fallback}${location.search}`} replace />
+    }
+
     return (
       <div className="pd-page">
         <div className="pd-alert">
-          You do not have permission to view this page. Your role: <strong>{user.roleLabel}</strong>
+          You do not have permission to view this page. Your role:{' '}
+          <strong>{user.roleLabel}</strong>
         </div>
-        <p>
-          <a href={routes.home}>Return to Home</a>
-        </p>
+        {fallback ? (
+          <p>
+            <a href={fallback}>Go to your dashboard</a>
+          </p>
+        ) : null}
       </div>
     )
   }

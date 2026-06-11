@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library'
-import { resolveUserRole } from './accessStore.mjs'
+import { resolveUserRole, getUserAccess } from './accessStore.mjs'
 import { loadPermissionsConfig, roleHasPage } from './permissions.mjs'
+import { normalizeScopedDepartments } from './departmentScope.mjs'
 
 function isLocalhostUrl(url) {
   return /localhost|127\.0\.0\.1/i.test(url ?? '')
@@ -102,6 +103,21 @@ export function attachSessionUser(session, { email, name, picture, sub, role, em
   }
 }
 
+async function enrichUserFromAccessStore(user) {
+  if (!user?.email) return user
+  try {
+    const access = await getUserAccess(user.email)
+    if (!access) return user
+    return {
+      ...user,
+      scopedDepartments: normalizeScopedDepartments(access.scopedDepartments),
+    }
+  } catch (err) {
+    console.warn('[auth] Could not load user department scope:', err)
+    return user
+  }
+}
+
 export function registerAuthRoutes(app) {
   if (!isAuthEnabled()) return
 
@@ -172,11 +188,12 @@ export function registerAuthRoutes(app) {
     }
   })
 
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res) => {
     if (!req.session?.user) {
       return res.status(401).json({ authenticated: false })
     }
-    const { email, name, picture, role, employeeId } = req.session.user
+    const enriched = await enrichUserFromAccessStore(req.session.user)
+    const { email, name, picture, role, employeeId, scopedDepartments } = enriched
     const config = loadPermissionsConfig()
     res.json({
       authenticated: true,
@@ -187,6 +204,7 @@ export function registerAuthRoutes(app) {
         picture,
         role,
         employeeId,
+        scopedDepartments: scopedDepartments ?? null,
         roleLabel: config.roles[role]?.label ?? role,
       },
       permissions: {
@@ -201,21 +219,26 @@ export function registerAuthRoutes(app) {
   })
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   if (!isAuthEnabled()) {
     req.user = {
       email: 'dev@local',
       name: 'Dev',
       role: 'admin',
       employeeId: null,
+      scopedDepartments: null,
     }
     return next()
   }
   if (!req.session?.user) {
     return res.status(401).json({ error: 'Authentication required' })
   }
-  req.user = req.session.user
-  next()
+  try {
+    req.user = await enrichUserFromAccessStore(req.session.user)
+    next()
+  } catch (err) {
+    next(err)
+  }
 }
 
 export function requireRole(...roles) {

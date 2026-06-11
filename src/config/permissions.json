@@ -1,21 +1,22 @@
 {
   "pages": {
     "home": { "label": "Home", "path": "/" },
-    "organization.departments": { "label": "Departments", "path": "/organization/departments" },
-    "organization.people": { "label": "People", "path": "/organization/people" },
-    "organization.person": { "label": "Person detail", "path": "/organization/people/:id" },
-    "performance.records": { "label": "Records", "path": "/performance/records" },
-    "performance.cycles": { "label": "Cycles", "path": "/performance/cycles" },
-    "performance.scorecard": { "label": "Scorecard detail", "path": "/performance/scorecards/:id" },
-    "goals": { "label": "Goals", "path": "/goals" },
-    "analytics.explore": { "label": "Explore", "path": "/analytics/explore" },
-    "analytics.monitoring": { "label": "Monitoring", "path": "/analytics/monitoring" },
-    "analytics.reviewers": { "label": "Reviewers", "path": "/analytics/reviewers" },
-    "analytics.calibration": { "label": "Calibration", "path": "/analytics/calibration" },
-    "admin.settings": { "label": "Settings", "path": "/admin/settings" },
-    "admin.dataHealth": { "label": "Data health", "path": "/admin/data-health" },
-    "admin.access": { "label": "User management", "path": "/admin/access" },
-    "account.profile": { "label": "Profile", "path": "/account/profile" }
+    "organization.departments": { "label": "Organization - Departments", "path": "/organization/departments" },
+    "organization.people": { "label": "Organization - People", "path": "/organization/people" },
+    "organization.person": { "label": "Organization - Person detail", "path": "/organization/people/:id" },
+    "performance.records": { "label": "Performance - Records", "path": "/performance/records" },
+    "performance.cycles": { "label": "Performance - Cycles", "path": "/performance/cycles" },
+    "performance.scorecard": { "label": "Performance - Scorecard detail", "path": "/performance/scorecards/:id" },
+    "performance.analytics": { "label": "Performance - Analytics", "path": "/performance/analytics" },
+    "performance.explore": { "label": "Performance - Explore", "path": "/performance/explore" },
+    "performance.reviewers": { "label": "Performance - Reviewers", "path": "/performance/reviewers" },
+    "performance.calibration": { "label": "Performance - Calibration", "path": "/performance/calibration" },
+    "goals": { "label": "Goals - Browse", "path": "/goals" },
+    "goals.analytics": { "label": "Goals - Analytics", "path": "/goals/analytics" },
+    "admin.settings": { "label": "Admin - Settings", "path": "/admin/settings" },
+    "admin.dataHealth": { "label": "Admin - Data health", "path": "/admin/data-health" },
+    "admin.access": { "label": "Admin - User management", "path": "/admin/access" },
+    "account.profile": { "label": "Account - Profile", "path": "/account/profile" }
   },
   "roles": {
     "admin": {
@@ -39,11 +40,12 @@
         "performance.records",
         "performance.cycles",
         "performance.scorecard",
+        "performance.analytics",
+        "performance.explore",
+        "performance.reviewers",
+        "performance.calibration",
         "goals",
-        "analytics.explore",
-        "analytics.monitoring",
-        "analytics.reviewers",
-        "analytics.calibration",
+        "goals.analytics",
         "admin.settings",
         "admin.dataHealth",
         "account.profile"
@@ -64,9 +66,10 @@
         "performance.records",
         "performance.cycles",
         "performance.scorecard",
+        "performance.analytics",
+        "performance.explore",
         "goals",
-        "analytics.explore",
-        "analytics.monitoring",
+        "goals.analytics",
         "account.profile"
       ],
       "system": true,
@@ -78,9 +81,16 @@
       "pages": [
         "home",
         "organization.departments",
-        "analytics.explore",
+        "performance.explore",
         "account.profile"
       ],
+      "system": true,
+      "dataAccess": "summary"
+    },
+    "hrbp": {
+      "label": "HRBP",
+      "description": "Goal program analytics only — no performance ratings",
+      "pages": ["goals.analytics", "account.profile"],
       "system": true,
       "dataAccess": "summary"
     }

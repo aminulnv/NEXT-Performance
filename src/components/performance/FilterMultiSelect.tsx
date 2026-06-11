@@ -14,6 +14,7 @@ type FilterMultiSelectProps = {
   placeholder?: string
   searchPlaceholder?: string
   active?: boolean
+  disabled?: boolean
 }
 
 function selectionLabel(
@@ -49,6 +50,7 @@ export function FilterMultiSelect({
   placeholder = 'All',
   searchPlaceholder = 'Search…',
   active = false,
+  disabled = false,
 }: FilterMultiSelectProps) {
   const listboxId = useId()
   const searchInputId = useId()
@@ -104,7 +106,11 @@ export function FilterMultiSelect({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={listboxId}
-          onClick={() => setOpen((current) => !current)}
+          disabled={disabled}
+          onClick={() => {
+            if (disabled) return
+            setOpen((current) => !current)
+          }}
         >
           <span className="pd-multi-select__value">
             {selectionLabel(selected, options, placeholder)}
