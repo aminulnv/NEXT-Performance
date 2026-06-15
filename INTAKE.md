@@ -6,8 +6,7 @@ Internal HR analytics dashboard for **Revolut People** performance data, goals t
 |-------|--------|
 | **App name** | NEXT-Performance (Performance Dashboard) |
 | **Production URL** | `https://performance.nextventures.io` |
-| **Source repository** | `https://github.com/aminulnv/NEXT-Performance` (branch `main`) |
-| **GitLab repository** | Not yet created; target path `https://gitlab.nextventures.io/qpt/next-performance` |
+| **Repository** | `https://gitlab.nextventures.io/qpt/next-performance` (branch `main`) |
 | **Pre-production URL** | `https://next-performance-beta.vercel.app` |
 | **Business owner** | Angie Ng Yun Ni (angie.yunni@nextventures.io), Associate Director, Performance & Total Rewards, People & Culture |
 | **Technical contact** | Aminul Islam (aminul.islam@nextventures.io) |
@@ -228,7 +227,7 @@ Detailed setup: `docs/SUPABASE_GO_LIVE.md` (concepts apply to any PostgreSQL hos
 
 ## 10. Go-live checklist
 
-- [ ] Repo on company GitLab; personal GitHub decommissioned or archived
+- [ ] Code pushed to GitLab (`gitlab.nextventures.io/qpt/next-performance`); personal GitHub archived
 - [ ] All migrations applied to RDS
 - [ ] Secrets injected (no plaintext in repo or email)
 - [ ] `APP_URL=https://performance.nextventures.io`
