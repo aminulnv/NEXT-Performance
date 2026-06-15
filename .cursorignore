@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+server/.cache/
+*.pem
+*.key
+credentials.json

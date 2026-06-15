@@ -7,7 +7,6 @@ import {
 import {
   listRoleIds,
   isValidRoleId,
-  normalizePermissionsConfig,
 } from './permissionsValidation.mjs'
 
 export { loadPermissionsConfig, getPermissionsCacheMeta } from './permissionsStore.mjs'

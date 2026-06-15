@@ -440,7 +440,8 @@ export default function AccessManagementPage() {
 
     setDraftPermissions((prev) => {
       if (!prev) return prev
-      const { [roleId]: _removed, ...roles } = prev.roles
+      const roles = { ...prev.roles }
+      delete roles[roleId]
       const next = { ...prev, roles }
       setRoleRows(rowsFromRoles(next))
       return next

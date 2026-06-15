@@ -372,7 +372,7 @@ function scorecardColumns(s) {
   if (Array.isArray(cycleSections) && cycleSections.length > 0) {
     try {
       out['Scorecard Key Learnings & Initiatives (JSON)'] = JSON.stringify(cycleSections);
-    } catch (e) {
+    } catch {
       out['Scorecard Key Learnings & Initiatives (JSON)'] = '';
     }
   }
@@ -387,7 +387,7 @@ function scorecardColumns(s) {
   if (rd.kpis_section != null) {
     try {
       out['Scorecard KPIs Section (JSON)'] = JSON.stringify(rd.kpis_section);
-    } catch (e) {
+    } catch {
       out['Scorecard KPIs Section (JSON)'] = '';
     }
   }
@@ -395,7 +395,7 @@ function scorecardColumns(s) {
   if (rd.previous_reviews_by_cycle != null) {
     try {
       out['Scorecard Previous Reviews By Cycle (JSON)'] = JSON.stringify(rd.previous_reviews_by_cycle);
-    } catch (e) {
+    } catch {
       out['Scorecard Previous Reviews By Cycle (JSON)'] = '';
     }
   }

@@ -1,6 +1,6 @@
 /** Resolve Revolut employee id/name by work email from cached directory or performance records. */
 
-import { employeeFullName, employeeEmail as employeeEmailFromRaw } from './employeeDirectory.mjs'
+import { employeeFullName } from './employeeDirectory.mjs'
 
 function normalizeEmail(value) {
   return String(value ?? '')
@@ -10,10 +10,6 @@ function normalizeEmail(value) {
 
 function employeeDisplayName(employee) {
   return employeeFullName(employee)
-}
-
-function employeeEmail(employee) {
-  return employeeEmailFromRaw(employee)
 }
 
 /** @param {unknown[]} employeesList */

@@ -17,7 +17,7 @@
     "start": "node server/index.mjs",
     "start:api": "node server/index.mjs",
     "cache:warm": "node server/warm-cache.mjs",
-    "test": "vitest run && node --test server/parseGoalsCsv.test.mjs server/goalsStore.test.mjs server/parseAccessCsv.test.mjs server/permissionsValidation.test.mjs server/employeeLookup.test.mjs server/employeeDirectory.test.mjs server/reportingTree.test.mjs server/fieldCrypto.test.mjs server/departmentScope.test.mjs server/authProduction.test.mjs server/rateLimit.test.mjs server/auditLog.test.mjs server/security.test.mjs server/errors.test.mjs",
+    "test": "vitest run && node --test server/parseGoalsCsv.test.mjs server/goalsStore.test.mjs server/oauthState.test.mjs server/parseAccessCsv.test.mjs server/permissionsValidation.test.mjs server/employeeLookup.test.mjs server/employeeDirectory.test.mjs server/reportingTree.test.mjs server/fieldCrypto.test.mjs server/departmentScope.test.mjs server/authProduction.test.mjs server/rateLimit.test.mjs server/auditLog.test.mjs server/security.test.mjs server/errors.test.mjs",
     "access:import": "node server/importAccessCsv.mjs",
     "access:migrate-supabase": "node server/migrateAccessToSupabase.mjs"
   },

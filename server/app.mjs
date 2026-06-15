@@ -14,6 +14,7 @@ import {
   isAuthEnabled,
   assertAuthProductionSafe,
   resolveSessionSecret,
+  resolveSessionMaxAge,
   validateAppUrlForProduction,
   getDefaultAppOrigin,
 } from './auth.mjs'
@@ -95,7 +96,7 @@ if (isAuthEnabled()) {
     cookieSession({
       name: 'pd.sid',
       keys: [resolveSessionSecret()],
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: resolveSessionMaxAge(),
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: 'lax',

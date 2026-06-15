@@ -62,8 +62,11 @@ export function errorResponseBody(err, env = process.env) {
 }
 
 /** Express error middleware — log details server-side, return safe JSON to clients. */
-export function errorHandler(err, req, res, _next) {
-  if (res.headersSent) return
+export function errorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    next(err)
+    return
+  }
 
   logServerError(req, err)
   const status = statusCodeFor(err)

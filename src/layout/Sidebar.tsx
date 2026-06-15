@@ -40,7 +40,6 @@ export function Sidebar(props: SidebarProps) {
     onProfileClick,
     onSignOut,
     isCollapsed,
-    onToggle: _onToggle,
     isMobile = false,
     isMobileOpen = false,
     onMobileClose,

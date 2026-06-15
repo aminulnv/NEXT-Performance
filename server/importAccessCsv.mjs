@@ -9,11 +9,8 @@
 import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { parseAccessCsv } from './parseAccessCsv.mjs'
 import { bulkUpsertUsers } from './accessStore.mjs'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 async function main() {
   const filePath = process.argv[2]

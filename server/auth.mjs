@@ -4,6 +4,7 @@ import { loadPermissionsConfig, roleHasPage } from './permissions.mjs'
 import { normalizeScopedDepartments } from './departmentScope.mjs'
 import { authRateLimit } from './rateLimit.mjs'
 import { audit } from './auditLog.mjs'
+import { consumeOAuthState, issueOAuthState } from './oauthState.mjs'
 
 function isLocalhostUrl(url) {
   return /localhost|127\.0\.0\.1/i.test(url ?? '')
@@ -91,6 +92,17 @@ function allowedDomain() {
 }
 
 export const MIN_SESSION_SECRET_LENGTH = 16
+export const DEFAULT_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+export function resolveSessionMaxAge(env = process.env) {
+  const raw = env.SESSION_MAX_AGE_MS?.trim()
+  if (!raw) return DEFAULT_SESSION_MAX_AGE_MS
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('[auth] SESSION_MAX_AGE_MS must be a positive number of milliseconds')
+  }
+  return parsed
+}
 
 /** Production runtime — Vercel sets VERCEL even when NODE_ENV is unset locally. */
 export function isProductionRuntime(env = process.env) {
@@ -189,10 +201,12 @@ export function registerAuthRoutes(app) {
     try {
       saveReturnTo(req.session, req.query.returnTo)
       const client = getOAuthClient(req)
+      const state = issueOAuthState(req.session)
       const url = client.generateAuthUrl({
         access_type: 'online',
         scope: ['openid', 'email', 'profile'],
         prompt: 'select_account',
+        state,
       })
       res.redirect(url)
     } catch (err) {
@@ -204,6 +218,9 @@ export function registerAuthRoutes(app) {
     const code = req.query.code
     if (!code || typeof code !== 'string') {
       return redirectToApp(res, '/login?error=missing_code', req)
+    }
+    if (!consumeOAuthState(req.session, typeof req.query.state === 'string' ? req.query.state : null)) {
+      return redirectToApp(res, '/login?error=invalid_state', req)
     }
 
     try {
