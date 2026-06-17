@@ -23,6 +23,7 @@ import {
 } from '@/lib/calendarQuarters'
 import { CheckInCompletionPanel } from '@/components/goals/CheckInCompletionPanel'
 import { GoalSubmissionStatGrid } from '@/components/goals/GoalSubmissionStatGrid'
+import { GoalSubmissionTracker } from '@/components/goals/GoalSubmissionTracker'
 import {
   buildCheckInCompletionSummary,
   buildGoalsMonitoringSummary,
@@ -1206,6 +1207,11 @@ export default function GoalsAnalyticsPage() {
               ) : null
             }
           >
+            <GoalSubmissionTracker
+              goalsSummary={goalsSummary}
+              reviewCycleLabel={reviewCycleFilter || null}
+            />
+
             <GoalSubmissionStatGrid goalsSummary={goalsSummary} exportStats={exportStats} />
 
             <BreakdownPanelGrid>

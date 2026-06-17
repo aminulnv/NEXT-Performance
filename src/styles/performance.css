@@ -2326,3 +2326,307 @@ a.pd-preset-card--link {
   border-color: var(--theme-primary-muted, #fecaca);
   background: var(--theme-primary-light, #fef2f2);
 }
+
+/* Goal submission tracker — org-wide status dashboard (light, matches Explore panels) */
+.pd-submission-tracker {
+  --tracker-bg: #ffffff;
+  --tracker-surface: #ffffff;
+  --tracker-border: #e5e7eb;
+  --tracker-text: #111827;
+  --tracker-muted: #6b7280;
+  --tracker-label: #9ca3af;
+  --tracker-seg-approved: #10b981;
+  --tracker-seg-awaiting: #f59e0b;
+  --tracker-seg-pending: #f3f4f6;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: var(--tracker-bg);
+  border: 1px solid var(--tracker-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  color: var(--tracker-text);
+}
+
+.pd-submission-tracker__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pd-submission-tracker__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  width: fit-content;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--theme-primary-dark, #b91c1c);
+  background: var(--theme-primary-light, #fef2f2);
+  border: 1px solid var(--theme-primary-muted, #fecaca);
+}
+
+.pd-submission-tracker__badge-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--theme-primary, #dc2626);
+}
+
+.pd-submission-tracker__title {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tracker-text);
+}
+
+.pd-submission-tracker__context {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--tracker-muted);
+}
+
+.pd-submission-tracker__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.pd-submission-tracker__stat {
+  min-width: 0;
+  padding: 1rem 1.125rem;
+  border-radius: 12px;
+  background: var(--tracker-surface);
+  border: 1px solid var(--tracker-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.pd-submission-tracker__stat-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tracker-label);
+}
+
+.pd-submission-tracker__stat-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--tracker-text);
+}
+
+.pd-submission-tracker__stat-sublabel {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--tracker-muted);
+}
+
+.pd-submission-tracker__stat--primary .pd-submission-tracker__stat-value {
+  color: var(--theme-primary, #dc2626);
+}
+
+.pd-submission-tracker__stat--muted .pd-submission-tracker__stat-value {
+  color: #d97706;
+}
+
+.pd-submission-tracker__stat--white .pd-submission-tracker__stat-value {
+  color: var(--tracker-text);
+}
+
+.pd-submission-tracker__stat--approved .pd-submission-tracker__stat-value {
+  color: #059669;
+}
+
+.pd-submission-tracker__section-label {
+  margin: 0 0 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.pd-submission-tracker__bar {
+  display: flex;
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--tracker-seg-pending);
+}
+
+.pd-submission-tracker__bar--empty {
+  opacity: 0.65;
+}
+
+.pd-submission-tracker__bar-seg {
+  height: 100%;
+  min-width: 2px;
+  transition: width 0.35s ease;
+}
+
+.pd-submission-tracker__bar-seg--approved {
+  background: var(--tracker-seg-approved);
+}
+
+.pd-submission-tracker__bar-seg--awaiting {
+  background: var(--tracker-seg-awaiting);
+}
+
+.pd-submission-tracker__bar-seg--pending {
+  background: var(--tracker-seg-pending);
+}
+
+.pd-submission-tracker__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--tracker-muted);
+}
+
+.pd-submission-tracker__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pd-submission-tracker__legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.pd-submission-tracker__legend-swatch--approved {
+  background: var(--tracker-seg-approved);
+}
+
+.pd-submission-tracker__legend-swatch--awaiting {
+  background: var(--tracker-seg-awaiting);
+}
+
+.pd-submission-tracker__legend-swatch--pending {
+  background: #e5e7eb;
+}
+
+.pd-submission-tracker__dept-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pd-submission-tracker__dept-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) 2.75rem 3.25rem;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.pd-submission-tracker__dept-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #374151;
+}
+
+.pd-submission-tracker__dept-pct {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tracker-text);
+}
+
+.pd-submission-tracker__dept-ratio {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--tracker-muted);
+  font-size: 0.75rem;
+}
+
+.pd-submission-tracker__zero {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--tracker-border);
+}
+
+.pd-submission-tracker__zero-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--theme-primary-dark, #b91c1c);
+}
+
+.pd-submission-tracker__zero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pd-submission-tracker__zero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--theme-primary-dark, #b91c1c);
+  background: var(--theme-primary-light, #fef2f2);
+  border: 1px solid var(--theme-primary-muted, #fecaca);
+}
+
+@media (max-width: 960px) {
+  .pd-submission-tracker__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pd-submission-tracker__dept-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name ratio'
+      'bar pct';
+  }
+
+  .pd-submission-tracker__dept-name {
+    grid-area: name;
+  }
+
+  .pd-submission-tracker__dept-row .pd-submission-tracker__bar {
+    grid-area: bar;
+  }
+
+  .pd-submission-tracker__dept-pct {
+    grid-area: pct;
+  }
+
+  .pd-submission-tracker__dept-ratio {
+    grid-area: ratio;
+  }
+}
+
+@media (max-width: 520px) {
+  .pd-submission-tracker {
+    padding: 1.125rem;
+  }
+
+  .pd-submission-tracker__stats {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useCallback, type MouseEvent, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, X, Search } from 'lucide-react'
+import { LogOut, X, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { NavItem, BrandConfig } from './types'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { assets } from '@/config/assets'
@@ -40,13 +40,12 @@ export function Sidebar(props: SidebarProps) {
     onProfileClick,
     onSignOut,
     isCollapsed,
+    onToggle,
     isMobile = false,
     isMobileOpen = false,
     onMobileClose,
   } = props
   const navigate = useNavigate()
-  const [isHovered, setIsHovered] = useState(false)
-  const [isPinned, setIsPinned] = useState(false)
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const query = searchQuery.trim().toLowerCase()
@@ -56,9 +55,11 @@ export function Sidebar(props: SidebarProps) {
         return item.children?.some((c) => c.label.toLowerCase().includes(query)) ?? false
       })
     : navItems
-  const collapsed = isMobile ? false : isCollapsed
-  const displayCollapsed = isMobile ? false : (collapsed && !isHovered && !isPinned)
+  const displayCollapsed = isMobile ? false : isCollapsed
   const { name, subtitle, icon: BrandIcon, logoColor = '#2CA85A', logoUrl } = brand
+  const nameSplitIndex = name.indexOf(' ')
+  const nameFirstLine = nameSplitIndex === -1 ? name : name.slice(0, nameSplitIndex)
+  const nameSecondLine = nameSplitIndex === -1 ? '' : name.slice(nameSplitIndex + 1)
 
   const iconCell = useCallback(
     (isActive: boolean) => ({
@@ -103,11 +104,54 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
+  const toggleButton = !isMobile ? (
+    <button
+      type="button"
+      data-tour="sidebar-toggle"
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      aria-expanded={!isCollapsed}
+      title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      style={{
+        width: '1.75rem',
+        height: '1.75rem',
+        borderRadius: '0.4375rem',
+        border: '0.0625rem solid rgba(255,255,255,0.14)',
+        background: 'rgba(255,255,255,0.07)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        color: 'rgba(255,255,255,0.7)',
+        flexShrink: 0,
+        transition: 'background 0.12s, color 0.12s',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.14)'
+        e.currentTarget.style.color = '#fff'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
+        e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
+      }}
+    >
+      {isCollapsed ? (
+        <ChevronRight size={14} strokeWidth={2.5} />
+      ) : (
+        <ChevronLeft size={14} strokeWidth={2.5} />
+      )}
+    </button>
+  ) : null
+
   const inner = (
     <>
       <div
         style={{
           display: 'flex',
+          flexDirection: 'row',
           alignItems: 'center',
           justifyContent: displayCollapsed ? 'center' : 'flex-start',
           gap: '0.625rem',
@@ -119,9 +163,6 @@ export function Sidebar(props: SidebarProps) {
         }}
         onClick={(e) => {
           e.stopPropagation()
-          if (!isMobile && (isHovered || isPinned)) {
-            setIsPinned((p) => !p)
-          }
           navigate('/')
           if (isMobile && onMobileClose) onMobileClose()
         }}
@@ -145,15 +186,26 @@ export function Sidebar(props: SidebarProps) {
           )}
         </div>
         {!displayCollapsed && (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: '#FFFFFF', fontSize: '0.9375rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
-              {name}
+          <div style={{ flex: 1, minWidth: 0, paddingRight: '2.25rem' }}>
+            <div style={{ color: '#FFFFFF', fontSize: '0.9375rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.01em' }}>
+              {nameFirstLine}
+              {nameSecondLine ? (
+                <>
+                  <br />
+                  {nameSecondLine}
+                </>
+              ) : null}
             </div>
             {subtitle && (
               <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: '0.5625rem', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: '0.125rem', whiteSpace: 'nowrap' }}>
                 {subtitle}
               </div>
             )}
+          </div>
+        )}
+        {!displayCollapsed && toggleButton && (
+          <div style={{ position: 'absolute', top: '0.875rem', right: '0.625rem' }}>
+            {toggleButton}
           </div>
         )}
         {isMobile && (
@@ -165,13 +217,19 @@ export function Sidebar(props: SidebarProps) {
           </button>
         )}
       </div>
-      <div
-        role="presentation"
-        onClick={() => {
-          if (!isMobile && (isHovered || isPinned)) setIsPinned((p) => !p)
-        }}
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, cursor: 'pointer' }}
-      >
+      {displayCollapsed && toggleButton && (
+        <div
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '0 0.625rem 0.5rem',
+          }}
+        >
+          {toggleButton}
+        </div>
+      )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ height: '0.0625rem', background: 'rgba(255,255,255,0.08)', marginInline: displayCollapsed ? '0.625rem' : '1rem', transition: 'margin 0.22s cubic-bezier(0.4,0,0.2,1)' }} />
       {displayCollapsed ? (
         <div
@@ -402,12 +460,7 @@ export function Sidebar(props: SidebarProps) {
       <aside
         style={{ width: displayCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED, flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'transparent', overflow: 'hidden', transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)' }}
       >
-        <div
-          role="presentation"
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          style={{ width: '100%', minHeight: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}
-        >
+        <div style={{ width: '100%', minHeight: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}>
           {inner}
         </div>
       </aside>
